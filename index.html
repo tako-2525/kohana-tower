@@ -42,7 +42,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
 <script>
-  // Bodies.fromVertices で decomp を使えるように
+  // fromVertices で decomp を使えるよう指定
   window.decomp = decomp;
   if (Matter && Matter.Common && Matter.Common.setDecomp) {
     Matter.Common.setDecomp(decomp);
@@ -77,7 +77,7 @@
 
 <script>
 (()=>{
-  const {Engine,Render,Runner,World,Bodies,Body,Events,Composite} = Matter;
+  const {Engine,Render,Runner,World,Bodies,Body,Composite,Events} = Matter;
 
   /* ===== 基本設定 ===== */
   const cfg = {
@@ -109,18 +109,11 @@
   const btnLeft=$('#left'), btnRight=$('#right'), btnRot=$('#rot'), btnDrop=$('#drop');
   const ov=$('#ov'), ovCard=$('#ovCard'), ovTitle=$('#ovTitle'), ovMsg=$('#ovMsg'), ovBtn=$('#ovBtn');
   hisEl.textContent = state.hiscore;
-
-  const setButtonsEnabled = en => {
-    [btnLeft,btnRight,btnRot,btnDrop].forEach(b=>{ b.disabled=!en; b.style.opacity=en?1:0.4; });
-  };
-  function updateScore(){
+  const setButtonsEnabled = en => [btnLeft,btnRight,btnRot,btnDrop].forEach(b=>{ b.disabled=!en; b.style.opacity=en?1:0.4; });
+  const updateScore = ()=>{
     scoreEl.textContent = state.score;
-    if(state.score>state.hiscore){
-      state.hiscore = state.score;
-      localStorage.setItem('kohana.hiscore', String(state.hiscore));
-      hisEl.textContent = state.hiscore;
-    }
-  }
+    if(state.score>state.hiscore){ state.hiscore=state.score; localStorage.setItem('kohana.hiscore', String(state.hiscore)); hisEl.textContent=state.hiscore; }
+  };
 
   /* ===== 画像検出（名前ゆれ対応） ===== */
   function candidatesFor(i){
@@ -148,7 +141,7 @@
   }
   const rand = arr => arr[Math.floor(Math.random()*arr.length)];
 
-  /* ===== Matter.js ===== */
+  /* ===== Matter.js 初期化 ===== */
   const canvas = document.getElementById('game');
   const engine = Engine.create(); engine.world.gravity.y = cfg.gravity;
   const render = Render.create({
@@ -158,13 +151,14 @@
   });
   Render.run(render); Runner.run(Runner.create(), engine);
 
+  // 土台＋壁
   const baseW = Math.round(cfg.w*0.66), baseH=22, baseY = Math.round(cfg.h*cfg.baseYRatio);
   const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {isStatic:true, render:{fillStyle:'#8B7355'}, label:'base'});
   const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
   const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
   World.add(engine.world,[base,wallL,wallR]);
 
-  /* ===== 画像→輪郭→凸分解（“1枚だけ描画”版） ===== */
+  /* ===== 画像→輪郭→凸分解 ===== */
   function getImageData(img){
     const c=document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight;
     const x=c.getContext('2d'); x.drawImage(img,0,0); return x.getImageData(0,0,c.width,c.height);
@@ -202,6 +196,9 @@
     if(area<0) p2.reverse(); return p2;
   }
 
+  // 画像描画情報（自前レンダリング用）
+  const spriteMap = new Map(); // body.id -> {img, s}
+
   async function bodyFromImageURL(url, x, y){
     const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
     const id = getImageData(img); const w=id.width, h=id.height, data=id.data;
@@ -213,11 +210,13 @@
       if(a>thr){ for(let dy=0;dy<step && yy+dy<h;dy++){ for(let dx=0;dx<step && xx+dx<w;dx++){ bin[(yy+dy)*w+(xx+dx)]=1; } } }
     }}
     let contour = traceContour(bin,w,h);
-    const matOpts = { friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece' };
+    const mat = { friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece' };
 
     if(contour.length<8){
       const s = cfg.targetEdge / Math.max(w,h);
-      return Bodies.rectangle(x,y, w*s, h*s, { render:{ sprite:{texture:url, xScale:s, yScale:s}}, ...matOpts });
+      const body = Bodies.rectangle(x,y, w*s, h*s, { render:{visible:false}, ...mat });
+      spriteMap.set(body.id, {img, s});
+      return body;
     }
     contour = ccwAndDedup(simplifyRDP(contour, Math.max(2, Math.min(w,h)/80)));
 
@@ -227,23 +226,10 @@
     const cx=(minx+maxx)/2, cy=(miny+maxy)/2;
     const verts = contour.map(([px,py])=>({x: x + (px-cx)*s, y: y + (py-cy)*s}));
 
-    const body = Bodies.fromVertices(x, y, [verts], { render:{}, ...matOpts }, true);
-    if(body && body.parts && body.parts.length>1){
-      // 子パーツの中で面積が最大のものだけにスプライトを付与（Matter.Render は part[1..] を描画するため）
-      let mainIndex = 1, maxArea = -1;
-      for(let i=1;i<body.parts.length;i++){
-        const b = body.parts[i];
-        const a = (b.bounds.max.x-b.bounds.min.x)*(b.bounds.max.y-b.bounds.min.y);
-        if(a>maxArea){ maxArea=a; mainIndex=i; }
-      }
-      for(let i=1;i<body.parts.length;i++){
-        body.parts[i].render.visible = (i===mainIndex);
-        body.parts[i].render.sprite = (i===mainIndex)? { texture:url, xScale:s, yScale:s } : null;
-      }
-    }else if(body){
-      // 単一パーツなら親にスプライト
-      body.render.sprite = { texture:url, xScale:s, yScale:s };
-    }
+    // 物理の当たりだけ作って、描画は自前でやる（すべて非表示）
+    const body = Bodies.fromVertices(x, y, [verts], { render:{visible:false}, ...mat }, true) || 
+                 Bodies.rectangle(x,y,(maxx-minx)*s,(maxy-miny)*s,{ render:{visible:false}, ...mat });
+    spriteMap.set(body.id, {img, s});
     return body;
   }
 
@@ -254,7 +240,7 @@
     state.spawnBusy = true;
 
     const topY = state.pieces.length ? Math.min(...state.pieces.map(b => b.position.y)) : base.position.y;
-    const y = Math.min(120, topY - 200); // 少し高めに
+    const y = Math.min(120, topY - 200);
     const x = cfg.w/2;
 
     let body=null;
@@ -264,10 +250,7 @@
     }catch(e){ body=null; }
     if(!body){
       const size = cfg.targetEdge;
-      body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, {
-        render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') },
-        friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece'
-      });
+      body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, { render:{visible:false}, friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece' });
     }
     Body.setStatic(body, true);
     body.label = 'currentPiece';
@@ -299,11 +282,10 @@
 
   /* ===== 物理：落下/安定 & 余分掃除 ===== */
   const STABLE_NEED = 55, VEL_THR = 0.15, ANG_THR = 0.02;
-
   function cleanupExtraCurrents(){
     if(state.phase!==PHASE.AIM) return;
     const currents = Composite.allBodies(engine.world).filter(b=>b.label==='currentPiece');
-    if(currents.length>1){ for(let i=1;i<currents.length;i++){ World.remove(engine.world, currents[i]); } }
+    if(currents.length>1){ for(let i=1;i<currents.length;i++){ World.remove(engine.world, currents[i]); spriteMap.delete(currents[i].id); } }
     if(!state.current || state.current.label!=='currentPiece'){ state.current = currents[0] || null; }
   }
 
@@ -321,7 +303,7 @@
       }
     }
 
-    // 安定判定
+    // 安定判定（完全に落ち着くまで次を出さない）
     if(state.phase===PHASE.DROP || state.phase===PHASE.SETTLE){
       let allSlow=true;
       for(const b of state.pieces){
@@ -337,6 +319,25 @@
         state.phase=PHASE.AIM; setButtonsEnabled(true); spawnPiece();
       }
     }
+  });
+
+  /* ===== 自前スプライト描画（ここがキモ！各ボディ1枚だけ描く） ===== */
+  Events.on(render, 'afterRender', ()=>{
+    const ctx = render.context;
+    // 現在ピース＋積み上げたピース、すべて1枚ずつ描画
+    const drawOne = (b)=>{
+      const info = spriteMap.get(b.id);
+      if(!info) return;
+      const img = info.img, s = info.s;
+      const w = img.naturalWidth * s, h = img.naturalHeight * s;
+      ctx.save();
+      ctx.translate(b.position.x, b.position.y);
+      ctx.rotate(b.angle);
+      ctx.drawImage(img, -w/2, -h/2, w, h);
+      ctx.restore();
+    };
+    if(state.current) drawOne(state.current);
+    for(const b of state.pieces) drawOne(b);
   });
 
   /* ===== カメラ ===== */
@@ -367,6 +368,7 @@
     World.clear(engine.world, false); Engine.clear(engine);
     engine.world.gravity.y = cfg.gravity; World.add(engine.world,[base,wallL,wallR]);
     state.score=0; state.pieces.length=0; state.current=null; state.stableFrames=0; state.spawnBusy=false;
+    spriteMap.clear();
     state.phase=PHASE.AIM; setButtonsEnabled(true);
     render.bounds.min={x:0,y:0}; render.bounds.max={x:cfg.w,y:cfg.h};
     updateScore(); spawnPiece();
@@ -408,7 +410,9 @@
     state.phase=PHASE.AIM; setButtonsEnabled(true); spawnPiece();
   });
 
-  updateScore();
+  // 初期表示
+  scoreEl.textContent = state.score;
+  hisEl.textContent = state.hiscore;
 })();
 </script>
 </body>
