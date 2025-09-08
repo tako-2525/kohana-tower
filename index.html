@@ -8,6 +8,7 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none}
   html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
   body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
+  /* 雲 */
   .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08))}
   .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
   .c1{width:120px;height:44px;top:14%;animation:flow 22s linear infinite}
@@ -16,13 +17,16 @@
   .c2::before{width:68px;height:42px;right:18px;top:-20px}
   @keyframes flow{0%{left:-140px}100%{left:110%}}
 
+  /* Canvas */
   #game{position:fixed;inset:0;display:block;width:100%;height:100%}
 
+  /* ステータス */
   #status{position:fixed;top:10px;left:50%;transform:translateX(-50%);
     background:rgba(255,255,255,.95);border-radius:22px;padding:8px 14px;display:flex;gap:14px;align-items:center;z-index:10}
   .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333}
   .si .v{font-size:18px;color:#FF6B6B}
 
+  /* 操作ボタン（バーではなくボタンだけ） */
   #ctrl{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
     display:flex;gap:14px;z-index:10}
   .btn{width:62px;height:62px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
@@ -30,6 +34,7 @@
   .btn:active{transform:scale(.96)}
   .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:14px}
 
+  /* オーバーレイ */
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.66);display:none;align-items:center;justify-content:center;z-index:20}
   .ov.show{display:flex}
   .card{background:#fff;border-radius:28px;padding:32px 24px;max-width:min(480px,90%);text-align:center;box-shadow:0 18px 36px rgba(0,0,0,.28)}
@@ -41,19 +46,23 @@
 </style>
 <!-- 物理エンジン -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-<!-- 凸分解（必須） -->
+<!-- 凸分解ライブラリ -->
 <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
 <script>window.decomp = decomp;</script>
 </head>
 <body>
-  <div class="cloud c1"></div><div class="cloud c2"></div>
+  <!-- 背景の雲 -->
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
 
+  <!-- ステータス -->
   <div id="status">
     <div class="si"><span>スコア</span><span id="score" class="v">0</span></div>
     <div class="si"><span>ハイスコア</span><span id="hiscore" class="v">0</span></div>
     <div class="si"><span>画像</span><span id="imgcnt" class="v">0</span></div>
   </div>
 
+  <!-- 操作ボタン -->
   <div id="ctrl">
     <button id="left"  class="btn" aria-label="左に動かす">◀</button>
     <button id="rot"   class="btn" aria-label="60度回転">↻</button>
@@ -61,8 +70,10 @@
     <button id="right" class="btn" aria-label="右に動かす">▶</button>
   </div>
 
+  <!-- ゲーム -->
   <canvas id="game"></canvas>
 
+  <!-- オーバーレイ（開始/勝敗） -->
   <div id="ov" class="ov show">
     <div class="card" id="ovCard">
       <h1 id="ovTitle">こはなタワー</h1>
@@ -80,7 +91,7 @@
     w: innerWidth, h: innerHeight,
     gravity: 0.9,
     maxPieces: 15,
-    targetEdge: 120,        // ピースの長辺目安（px）
+    targetEdge: 120,   // 画像の長辺がこのくらいになるよう自動スケール
     baseYRatio: 0.75,
     fallKillMargin: 80
   };
@@ -89,16 +100,21 @@
   const state = {
     score: 0,
     hiscore: Number(localStorage.getItem('kohana.hiscore')||0),
-    current: null, dropping:false, over:false,
+    current: null,
+    dropping: false,
+    waitStable: false,
+    stableFrames: 0,
+    over: false,
     pieces: [],
-    images: [], // 実際に使う画像URL（見つかったものだけ）
+    images: [],       // 見つかった画像URL
+    imagesReady: false
   };
 
   /* ===== 便利 ===== */
   const $ = s=>document.querySelector(s);
   const scoreEl = $('#score'), hisEl = $('#hiscore'), imgCntEl = $('#imgcnt');
   hisEl.textContent = state.hiscore;
-  const rand = (arr)=> arr[Math.floor(Math.random()*arr.length)]; // 完全ランダム
+  const rand = arr => arr[Math.floor(Math.random()*arr.length)];
 
   function updateScore(){
     scoreEl.textContent = state.score;
@@ -109,18 +125,17 @@
     }
   }
 
-  /* ===== 画像ファイルの自動検出 =====
-     - piece01.png, piece01.PNG, piece_01.png, piece01.png.png などに対応 */
+  /* ===== 画像ファイル自動検出（名前ゆれ対応） ===== */
   function candidatesFor(i){
     const nn = String(i).padStart(2,'0');
-    const base = [
-      `piece${nn}.png`, `piece_${nn}.png`, `peice${nn}.png`,
-      `piece${i}.png` // 1桁名にも対応
+    const bases = [
+      `piece${nn}.png`,`piece_${nn}.png`,`peice${nn}.png`,
+      `piece${i}.png`
     ];
     const exts = ['png','PNG'];
-    const doubles = base.flatMap(n=>[`${n}.png`, `${n}.PNG`]); // .png.png 等
+    const doubles = bases.flatMap(n=>[`${n}.png`, `${n}.PNG`]); // .png.png 等
     const all = [
-      ...base.flatMap(n=>exts.map(e=>`${n.replace(/\.png$/,'')}.${e}`)),
+      ...bases.flatMap(n=>exts.map(e=>`${n.replace(/\.png$/,'')}.${e}`)),
       ...doubles
     ];
     return all.map(n=>`images/${n}`);
@@ -142,6 +157,7 @@
       if(ok) found.push(ok);
     }
     state.images = found;
+    state.imagesReady = true;
     imgCntEl.textContent = `${found.length}/${cfg.maxPieces}`;
   }
 
@@ -158,23 +174,22 @@
   Render.run(render);
   Runner.run(Runner.create(), engine);
 
-  /* 土台と壁 */
+  /* 土台と壁（画面下1/4の高さ・横幅2/3） */
   const baseW = Math.round(cfg.w*0.66), baseH=22, baseY = Math.round(cfg.h*cfg.baseYRatio);
   const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {isStatic:true, render:{fillStyle:'#8B7355'}});
   const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
   const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
   World.add(engine.world,[base,wallL,wallR]);
 
-  /* ===== 輪郭抽出（Moore隣接法 → RDP簡略化） ===== */
+  /* ===== 画像→輪郭→凸分解 ===== */
   function getImageData(img){
     const c=document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight;
     const x=c.getContext('2d'); x.drawImage(img,0,0); return x.getImageData(0,0,c.width,c.height);
   }
+  // Moore の境界追跡（簡易）
   function traceContour(bin,w,h){
-    // bin: Uint8Array 0/1, 4近傍境界を時計回りで追跡
     const idx=(x,y)=>y*w+x;
     const inB=(x,y)=>x>=0&&y>=0&&x<w&&y<h;
-    // 境界の開始点を探す
     let sx=-1, sy=-1;
     outer: for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
@@ -187,37 +202,35 @@
       }
     }
     if(sx<0) return [];
-    const dirs=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]; // 8近傍
+    const dirs=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
     let x=sx,y=sy, di=0, loop=0;
     const path=[];
     do{
       path.push([x,y]);
-      // 次方向を探索（前進優先）
       let found=false;
       for(let k=0;k<8;k++){
-        const ni=(di+k+7)%8; // 右手法
+        const ni=(di+k+7)%8;
         const nx=x+dirs[ni][0], ny=y+dirs[ni][1];
         if(inB(nx,ny) && bin[idx(nx,ny)]){ x=nx; y=ny; di=ni; found=true; break; }
       }
       if(!found) break;
-      loop++; if(loop> w*h*4) break; // セーフティ
+      loop++; if(loop> w*h*4) break;
     }while(!(x===sx && y===sy && path.length>1));
     return path;
   }
+  // RDP 簡略化
   function simplifyRDP(pts, eps){
     if(pts.length<3) return pts;
-    const dmaxInfo = (()=>{ let idx=-1, dmax=0;
-      const [sx,sy]=pts[0], [ex,ey]=pts.at(-1);
-      const A=ey-sy, B=sx-ex, C=ex*sy - ey*sx;
-      for(let i=1;i<pts.length-1;i++){
-        const [x,y]=pts[i]; const d=Math.abs(A*x+B*y+C)/Math.hypot(A,B);
-        if(d>dmax){dmax=d; idx=i;}
-      }
-      return {idx,dmax};
-    })();
-    if(dmaxInfo.dmax<=eps) return [pts[0], pts.at(-1)];
-    const left = simplifyRDP(pts.slice(0,dmaxInfo.idx+1), eps);
-    const right= simplifyRDP(pts.slice(dmaxInfo.idx), eps);
+    const [sx,sy]=pts[0], [ex,ey]=pts.at(-1);
+    const A=ey-sy, B=sx-ex, C=ex*sy - ey*sx;
+    let dmax=0, idx=-1;
+    for(let i=1;i<pts.length-1;i++){
+      const [x,y]=pts[i]; const d=Math.abs(A*x+B*y+C)/Math.hypot(A,B);
+      if(d>dmax){dmax=d; idx=i;}
+    }
+    if(dmax<=eps) return [pts[0], pts.at(-1)];
+    const left = simplifyRDP(pts.slice(0,idx+1), eps);
+    const right= simplifyRDP(pts.slice(idx), eps);
     return left.slice(0,-1).concat(right);
   }
 
@@ -225,7 +238,8 @@
     const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
     const id = getImageData(img);
     const w=id.width, h=id.height, data=id.data;
-    // 透過マスク（間引きして高速化）
+
+    // 透過マスク（ダウンサンプル）
     const step = Math.max(2, Math.floor(Math.min(w,h)/64));
     const bin = new Uint8Array(w*h);
     const thr = 16;
@@ -241,10 +255,9 @@
         }
       }
     }
-    // 外周をトレース → 簡略化
     let contour = traceContour(bin,w,h);
     if(contour.length<8){
-      // 輪郭が取れない時は矩形スプライト
+      // 取れない場合は矩形スプライト
       const s = cfg.targetEdge / Math.max(w,h);
       return Bodies.rectangle(x,y, w*s, h*s, {
         render:{ sprite:{texture:url, xScale:s, yScale:s}},
@@ -252,17 +265,18 @@
       });
     }
     contour = simplifyRDP(contour, Math.max(2, Math.min(w,h)/80));
-    // スケール算出（長辺が targetEdge になるよう）
+
+    // スケール（長辺を targetEdge に）
     const minx=Math.min(...contour.map(p=>p[0])), maxx=Math.max(...contour.map(p=>p[0]));
     const miny=Math.min(...contour.map(p=>p[1])), maxy=Math.max(...contour.map(p=>p[1]));
     const longEdge = Math.max(maxx-minx, maxy-miny) || 1;
     const s = cfg.targetEdge / longEdge;
 
-    // ワールド座標に変換（中心合わせ）
+    // 中心合わせ → ワールド座標へ
     const cx = (minx+maxx)/2, cy=(miny+maxy)/2;
     const verts = contour.map(([px,py])=>({x: x + (px-cx)*s, y: y + (py-cy)*s}));
 
-    // 凸分解付きで作成
+    // 凸分解付き fromVertices
     const body = Bodies.fromVertices(x, y, [verts], {
       render:{ sprite:{texture:url, xScale:s, yScale:s}},
       friction:.35, frictionStatic:.65, restitution:.06, density:.002
@@ -276,14 +290,20 @@
     });
   }
 
-  /* ===== ピース生成（完全ランダム） ===== */
+  /* ===== ピース生成（重なり対策入り） ===== */
   async function spawnPiece(){
-    if(state.dropping || state.over) return;
-    const x=cfg.w/2, y=120;
-    let body=null;
+    if(state.dropping || state.over || state.current) return;
 
+    // 塔の最上部よりさらに上にスポーン
+    const topY = state.pieces.length
+      ? Math.min(...state.pieces.map(b => b.position.y))
+      : base.position.y;
+    const y = Math.min(120, topY - 160); // 120 か、最上部から160px上
+    const x = cfg.w/2;
+
+    let body=null;
     if(state.images.length){
-      const url = rand(state.images); // 偏り補正なし
+      const url = rand(state.images); // 完全ランダム（偏り補正なし）
       try{ body = await bodyFromImageURL(url, x, y); }catch(e){ body=null; }
     }
     if(!body){
@@ -294,12 +314,12 @@
         friction:.5, frictionStatic:.7, restitution:.05, density:.002
       });
     }
-    Body.setStatic(body, true);
+    Body.setStatic(body, true);    // 落とすまでは静的
     World.add(engine.world, body);
     state.current = body;
   }
 
-  /* ===== 操作・進行 ===== */
+  /* ===== 操作 ===== */
   function movePiece(dx){
     if(!state.current || state.dropping) return;
     const nx = Math.max(30, Math.min(cfg.w-30, state.current.position.x + dx));
@@ -311,33 +331,55 @@
   }
   function dropPiece(){
     if(!state.current || state.dropping || state.over) return;
-    Body.setStatic(state.current, false);
+    Body.setStatic(state.current, false);   // ここで物理に解放
     state.dropping = true;
+    state.waitStable = true;                // 安定待ち開始
+    state.stableFrames = 0;
     state.pieces.push(state.current);
-    setTimeout(async ()=>{
-      if(state.over) return;
-      state.score++; updateScore();
-      if(state.score >= cfg.maxPieces){ win(); }
-      else{ state.dropping=false; state.current=null; spawnPiece(); }
-    }, 900);
+    state.current = null;                   // 次は安定後に出す
   }
 
-  /* ===== 落下監視 ===== */
-  function checkFalls(){
+  /* ===== 毎フレーム：落下＋安定判定 ===== */
+  const STABLE_NEED = 45; // 連続フレーム（約0.75秒）
+  const VEL_THR = 0.18;   // 速度閾値
+  const ANG_THR = 0.02;   // 角速度閾値
+
+  Events.on(engine, 'afterUpdate', ()=>{
     if(state.over) return;
+
+    // 落下チェック（場外 or 土台外へ明確に落ちたら敗北）
     const thresholdY = cfg.h + cfg.fallKillMargin;
     const left = base.position.x - baseW/2;
     const right= base.position.x + baseW/2;
     for(const b of state.pieces){
-      if(b.position.y > thresholdY){ return lose(`${state.score}個で落下…`); }
+      if(b.position.y > thresholdY){
+        return lose(`${state.score}個で落下…`);
+      }
       if(b.position.y > base.position.y + 28 && (b.position.x<left || b.position.x>right)){
         return lose(`${state.score}個で土台から落下…`);
       }
     }
-  }
-  Events.on(engine,'afterUpdate', checkFalls);
 
-  /* ===== 縦カメラ ===== */
+    // 安定判定：全動体がしきい値以下の状態が連続したら次ピース
+    if(state.waitStable){
+      let allSlow = true;
+      for(const b of state.pieces){
+        if(b.isStatic) continue;
+        if(b.speed > VEL_THR || Math.abs(b.angularVelocity) > ANG_THR){ allSlow = false; break; }
+      }
+      state.stableFrames = allSlow ? state.stableFrames + 1 : 0;
+
+      if(state.stableFrames >= STABLE_NEED){
+        state.waitStable = false;
+        state.dropping = false;
+        state.score++; updateScore();
+        if(state.score >= cfg.maxPieces){ win(); }
+        else { spawnPiece(); }
+      }
+    }
+  });
+
+  /* ===== 縦カメラ（塔が高くなったら上へパン） ===== */
   (function cam(){
     let minY = base.position.y;
     for(const b of state.pieces){ if(b.position.y < minY) minY = b.position.y; }
@@ -355,17 +397,23 @@
     requestAnimationFrame(cam);
   })();
 
-  /* ===== 勝ち負け／リセット ===== */
+  /* ===== 勝ち負け・リセット ===== */
   const ov=$('#ov'), ovCard=$('#ovCard'), ovTitle=$('#ovTitle'), ovMsg=$('#ovMsg'), ovBtn=$('#ovBtn');
-  function win(){ state.over=true; ov.classList.add('show'); ovCard.classList.add('win');
-    ovTitle.textContent='クリア！'; ovMsg.textContent=`見事 ${cfg.maxPieces} 個積み上げました！`; ovBtn.textContent='もう一度'; }
-  function lose(msg){ state.over=true; ov.classList.add('show'); ovCard.classList.add('lose');
-    ovTitle.textContent='ゲームオーバー'; ovMsg.textContent=msg||`${state.score}個で崩れてしまいました`; ovBtn.textContent='リトライ'; }
+  function win(){
+    state.over=true; ov.classList.add('show'); ovCard.classList.add('win');
+    ovTitle.textContent='クリア！'; ovMsg.textContent=`見事 ${cfg.maxPieces} 個積み上げました！`; ovBtn.textContent='もう一度';
+  }
+  function lose(msg){
+    state.over=true; ov.classList.add('show'); ovCard.classList.add('lose');
+    ovTitle.textContent='ゲームオーバー'; ovMsg.textContent=msg||`${state.score}個で崩れてしまいました`; ovBtn.textContent='リトライ';
+  }
   function reset(){
     World.clear(engine.world, false); Engine.clear(engine);
     engine.world.gravity.y = cfg.gravity; World.add(engine.world,[base,wallL,wallR]);
     state.score=0; state.current=null; state.dropping=false; state.over=false; state.pieces.length=0;
-    render.bounds.min={x:0,y:0}; render.bounds.max={x:cfg.w,y:cfg.h}; updateScore(); spawnPiece();
+    state.waitStable=false; state.stableFrames=0;
+    render.bounds.min={x:0,y:0}; render.bounds.max={x:cfg.w,y:cfg.h};
+    updateScore(); spawnPiece();
   }
 
   /* ===== 入力 ===== */
@@ -381,6 +429,7 @@
   press(document.getElementById('right'),()=>movePiece( 6));
   document.getElementById('rot').addEventListener('click', rotatePiece);
   document.getElementById('drop').addEventListener('click', dropPiece);
+
   document.addEventListener('keydown', e=>{
     if(e.key==='ArrowLeft') movePiece(-6);
     if(e.key==='ArrowRight') movePiece(6);
@@ -388,15 +437,14 @@
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E') rotatePiece();
     if(e.key==='r'||e.key==='R') if(state.over) reset();
   });
+
   window.addEventListener('resize', ()=>{
     render.canvas.width = (cfg.w=innerWidth);
     render.canvas.height= (cfg.h=innerHeight);
   });
 
-  /* ===== 起動：まず画像検出 → スタート ===== */
-  (async ()=>{
-    await findAllImages(); // ここで .png.png も拾う
-  })();
+  /* ===== 起動：まず画像検出 → スタート押下でspawn ===== */
+  (async ()=>{ await findAllImages(); })();
 
   document.getElementById('ovBtn').addEventListener('click', ()=>{
     document.getElementById('ov').classList.remove('show');
@@ -408,4 +456,3 @@
 </script>
 </body>
 </html>
-
