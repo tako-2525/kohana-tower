@@ -1,4 +1,3 @@
-<!-- index.html（リポジトリ直下に1ファイル、これだけで動きます） -->
 <!doctype html>
 <html lang="ja">
 <head>
@@ -6,10 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <title>こはなタワー</title>
 <style>
-  *{box-sizing:border-box; margin:0; padding:0; -webkit-user-select:none; user-select:none}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none}
   html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
   body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
-  /* 雲 */
   .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08))}
   .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
   .c1{width:120px;height:44px;top:14%;animation:flow 22s linear infinite}
@@ -18,16 +16,13 @@
   .c2::before{width:68px;height:42px;right:18px;top:-20px}
   @keyframes flow{0%{left:-140px}100%{left:110%}}
 
-  /* Canvas */
   #game{position:fixed;inset:0;display:block;width:100%;height:100%}
 
-  /* ステータス */
   #status{position:fixed;top:10px;left:50%;transform:translateX(-50%);
     background:rgba(255,255,255,.95);border-radius:22px;padding:8px 14px;display:flex;gap:14px;align-items:center;z-index:10}
   .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333}
   .si .v{font-size:18px;color:#FF6B6B}
 
-  /* 操作ボタン（バーではなくボタンだけ） */
   #ctrl{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
     display:flex;gap:14px;z-index:10}
   .btn{width:62px;height:62px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
@@ -35,7 +30,6 @@
   .btn:active{transform:scale(.96)}
   .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:14px}
 
-  /* オーバーレイ */
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.66);display:none;align-items:center;justify-content:center;z-index:20}
   .ov.show{display:flex}
   .card{background:#fff;border-radius:28px;padding:32px 24px;max-width:min(480px,90%);text-align:center;box-shadow:0 18px 36px rgba(0,0,0,.28)}
@@ -45,20 +39,21 @@
   .card.win h1{color:#4ECDC4}
   .card.lose h1{color:#95A5A6}
 </style>
+<!-- 物理エンジン -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<!-- 凸分解（必須） -->
+<script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
+<script>window.decomp = decomp;</script>
 </head>
 <body>
-  <!-- 背景の雲 -->
-  <div class="cloud c1"></div>
-  <div class="cloud c2"></div>
+  <div class="cloud c1"></div><div class="cloud c2"></div>
 
-  <!-- ステータス -->
   <div id="status">
     <div class="si"><span>スコア</span><span id="score" class="v">0</span></div>
     <div class="si"><span>ハイスコア</span><span id="hiscore" class="v">0</span></div>
+    <div class="si"><span>画像</span><span id="imgcnt" class="v">0</span></div>
   </div>
 
-  <!-- 操作ボタン -->
   <div id="ctrl">
     <button id="left"  class="btn" aria-label="左に動かす">◀</button>
     <button id="rot"   class="btn" aria-label="60度回転">↻</button>
@@ -66,10 +61,8 @@
     <button id="right" class="btn" aria-label="右に動かす">▶</button>
   </div>
 
-  <!-- ゲーム -->
   <canvas id="game"></canvas>
 
-  <!-- オーバーレイ（開始/勝敗） -->
   <div id="ov" class="ov show">
     <div class="card" id="ovCard">
       <h1 id="ovTitle">こはなタワー</h1>
@@ -80,340 +73,336 @@
 
 <script>
 (()=>{
-  const {Engine,Render,Runner,World,Bodies,Body,Composite,Events,Bounds,Vector} = Matter;
+  const {Engine,Render,Runner,World,Bodies,Body,Events} = Matter;
 
-  /* ---------- 基本設定 ---------- */
+  /* ===== 基本設定 ===== */
   const cfg = {
-    w: window.innerWidth,
-    h: window.innerHeight,
+    w: innerWidth, h: innerHeight,
     gravity: 0.9,
     maxPieces: 15,
-    pieceScale: 0.55,            // 画像の表示スケール
-    baseYRatio: 0.75,            // 画面下から1/4の高さに土台
-    fallKillMargin: 80           // 画面外に落ちたと判定する余白
+    targetEdge: 120,        // ピースの長辺目安（px）
+    baseYRatio: 0.75,
+    fallKillMargin: 80
   };
 
-  /* ---------- 状態 ---------- */
+  /* ===== 状態 ===== */
   const state = {
     score: 0,
     hiscore: Number(localStorage.getItem('kohana.hiscore')||0),
-    current: null,
-    dropping: false,
-    over: false,
+    current: null, dropping:false, over:false,
     pieces: [],
-    moveTimer: null
+    images: [], // 実際に使う画像URL（見つかったものだけ）
   };
 
-  /* ---------- 画像ファイル候補（piece と peice の両綴りをサポート） ---------- */
-  const imgList = [];
-  for(let i=1;i<=15;i++){
-    const nn = String(i).padStart(2,'0');
-    imgList.push(`images/piece${nn}.png`);
-    imgList.push(`images/peice${nn}.png`);
-  }
-
-  /* ---------- Matter.js 初期化 ---------- */
-  const canvas = document.getElementById('game');
-  const engine = Engine.create();
-  engine.world.gravity.y = cfg.gravity;
-
-  const render = Render.create({
-    canvas,
-    engine,
-    options:{
-      width: cfg.w,
-      height: cfg.h,
-      background:'transparent',
-      wireframes:false,
-      pixelRatio: Math.min(window.devicePixelRatio||1, 2)
-    }
-  });
-  Render.run(render);
-  const runner = Runner.create();
-  Runner.run(runner, engine);
-
-  /* ---------- 土台と壁 ---------- */
-  const baseW = Math.round(cfg.w*0.66);
-  const baseH = 22;
-  const baseY = Math.round(cfg.h*cfg.baseYRatio);
-
-  const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {
-    isStatic:true,
-    render:{ fillStyle:'#8B7355' }
-  });
-
-  const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
-  const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
-  World.add(engine.world,[base,wallL,wallR]);
-
-  /* ---------- UI ---------- */
-  const $ = sel=>document.querySelector(sel);
-  const ov = $('#ov'), ovCard = $('#ovCard'), ovTitle = $('#ovTitle'), ovMsg = $('#ovMsg'), ovBtn = $('#ovBtn');
-  const scoreEl = $('#score'), hisEl = $('#hiscore');
+  /* ===== 便利 ===== */
+  const $ = s=>document.querySelector(s);
+  const scoreEl = $('#score'), hisEl = $('#hiscore'), imgCntEl = $('#imgcnt');
   hisEl.textContent = state.hiscore;
+  const rand = (arr)=> arr[Math.floor(Math.random()*arr.length)]; // 完全ランダム
 
-  const updateScore = ()=>{
+  function updateScore(){
     scoreEl.textContent = state.score;
     if(state.score>state.hiscore){
       state.hiscore = state.score;
       localStorage.setItem('kohana.hiscore', String(state.hiscore));
       hisEl.textContent = state.hiscore;
     }
-  };
+  }
 
-  /* ---------- 画像 → 外形（凸）生成（簡易版） ---------- */
-  function loadImageWithFallback(list, idx=0){
-    return new Promise((resolve,reject)=>{
-      if(idx>=list.length) return reject(new Error('not found'));
+  /* ===== 画像ファイルの自動検出 =====
+     - piece01.png, piece01.PNG, piece_01.png, piece01.png.png などに対応 */
+  function candidatesFor(i){
+    const nn = String(i).padStart(2,'0');
+    const base = [
+      `piece${nn}.png`, `piece_${nn}.png`, `peice${nn}.png`,
+      `piece${i}.png` // 1桁名にも対応
+    ];
+    const exts = ['png','PNG'];
+    const doubles = base.flatMap(n=>[`${n}.png`, `${n}.PNG`]); // .png.png 等
+    const all = [
+      ...base.flatMap(n=>exts.map(e=>`${n.replace(/\.png$/,'')}.${e}`)),
+      ...doubles
+    ];
+    return all.map(n=>`images/${n}`);
+  }
+  function testImage(url){
+    return new Promise(res=>{
       const img = new Image();
-      img.onload = ()=>resolve(img);
-      img.onerror = ()=>resolve(loadImageWithFallback(list, idx+1)); // 次候補へ
-      img.src = list[idx];
+      img.onload = ()=>res(url);
+      img.onerror = ()=>res(null);
+      img.src = url;
+    });
+  }
+  async function findAllImages(){
+    const found=[];
+    for(let i=1;i<=cfg.maxPieces;i++){
+      const list = candidatesFor(i);
+      let ok=null;
+      for(const u of list){ ok = await testImage(u); if(ok) break; }
+      if(ok) found.push(ok);
+    }
+    state.images = found;
+    imgCntEl.textContent = `${found.length}/${cfg.maxPieces}`;
+  }
+
+  /* ===== Matter.js 準備 ===== */
+  const canvas = document.getElementById('game');
+  const engine = Engine.create();
+  engine.world.gravity.y = cfg.gravity;
+
+  const render = Render.create({
+    canvas, engine,
+    options:{ width:cfg.w, height:cfg.h, background:'transparent', wireframes:false,
+      pixelRatio: Math.min(devicePixelRatio||1, 2) }
+  });
+  Render.run(render);
+  Runner.run(Runner.create(), engine);
+
+  /* 土台と壁 */
+  const baseW = Math.round(cfg.w*0.66), baseH=22, baseY = Math.round(cfg.h*cfg.baseYRatio);
+  const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {isStatic:true, render:{fillStyle:'#8B7355'}});
+  const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
+  const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
+  World.add(engine.world,[base,wallL,wallR]);
+
+  /* ===== 輪郭抽出（Moore隣接法 → RDP簡略化） ===== */
+  function getImageData(img){
+    const c=document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight;
+    const x=c.getContext('2d'); x.drawImage(img,0,0); return x.getImageData(0,0,c.width,c.height);
+  }
+  function traceContour(bin,w,h){
+    // bin: Uint8Array 0/1, 4近傍境界を時計回りで追跡
+    const idx=(x,y)=>y*w+x;
+    const inB=(x,y)=>x>=0&&y>=0&&x<w&&y<h;
+    // 境界の開始点を探す
+    let sx=-1, sy=-1;
+    outer: for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        if(bin[idx(x,y)] && (
+          !inB(x-1,y) || !bin[idx(x-1,y)] ||
+          !inB(x+1,y) || !bin[idx(x+1,y)] ||
+          !inB(x,y-1) || !bin[idx(x,y-1)] ||
+          !inB(x,y+1) || !bin[idx(x,y+1)]
+        )){ sx=x; sy=y; break outer; }
+      }
+    }
+    if(sx<0) return [];
+    const dirs=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]; // 8近傍
+    let x=sx,y=sy, di=0, loop=0;
+    const path=[];
+    do{
+      path.push([x,y]);
+      // 次方向を探索（前進優先）
+      let found=false;
+      for(let k=0;k<8;k++){
+        const ni=(di+k+7)%8; // 右手法
+        const nx=x+dirs[ni][0], ny=y+dirs[ni][1];
+        if(inB(nx,ny) && bin[idx(nx,ny)]){ x=nx; y=ny; di=ni; found=true; break; }
+      }
+      if(!found) break;
+      loop++; if(loop> w*h*4) break; // セーフティ
+    }while(!(x===sx && y===sy && path.length>1));
+    return path;
+  }
+  function simplifyRDP(pts, eps){
+    if(pts.length<3) return pts;
+    const dmaxInfo = (()=>{ let idx=-1, dmax=0;
+      const [sx,sy]=pts[0], [ex,ey]=pts.at(-1);
+      const A=ey-sy, B=sx-ex, C=ex*sy - ey*sx;
+      for(let i=1;i<pts.length-1;i++){
+        const [x,y]=pts[i]; const d=Math.abs(A*x+B*y+C)/Math.hypot(A,B);
+        if(d>dmax){dmax=d; idx=i;}
+      }
+      return {idx,dmax};
+    })();
+    if(dmaxInfo.dmax<=eps) return [pts[0], pts.at(-1)];
+    const left = simplifyRDP(pts.slice(0,dmaxInfo.idx+1), eps);
+    const right= simplifyRDP(pts.slice(dmaxInfo.idx), eps);
+    return left.slice(0,-1).concat(right);
+  }
+
+  async function bodyFromImageURL(url, x, y){
+    const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
+    const id = getImageData(img);
+    const w=id.width, h=id.height, data=id.data;
+    // 透過マスク（間引きして高速化）
+    const step = Math.max(2, Math.floor(Math.min(w,h)/64));
+    const bin = new Uint8Array(w*h);
+    const thr = 16;
+    for(let yy=0; yy<h; yy+=step){
+      for(let xx=0; xx<w; xx+=step){
+        const a = data[(yy*w+xx)*4+3];
+        if(a>thr){
+          for(let dy=0;dy<step && yy+dy<h;dy++){
+            for(let dx=0;dx<step && xx+dx<w;dx++){
+              bin[(yy+dy)*w+(xx+dx)] = 1;
+            }
+          }
+        }
+      }
+    }
+    // 外周をトレース → 簡略化
+    let contour = traceContour(bin,w,h);
+    if(contour.length<8){
+      // 輪郭が取れない時は矩形スプライト
+      const s = cfg.targetEdge / Math.max(w,h);
+      return Bodies.rectangle(x,y, w*s, h*s, {
+        render:{ sprite:{texture:url, xScale:s, yScale:s}},
+        friction:.35, frictionStatic:.65, restitution:.06, density:.002
+      });
+    }
+    contour = simplifyRDP(contour, Math.max(2, Math.min(w,h)/80));
+    // スケール算出（長辺が targetEdge になるよう）
+    const minx=Math.min(...contour.map(p=>p[0])), maxx=Math.max(...contour.map(p=>p[0]));
+    const miny=Math.min(...contour.map(p=>p[1])), maxy=Math.max(...contour.map(p=>p[1]));
+    const longEdge = Math.max(maxx-minx, maxy-miny) || 1;
+    const s = cfg.targetEdge / longEdge;
+
+    // ワールド座標に変換（中心合わせ）
+    const cx = (minx+maxx)/2, cy=(miny+maxy)/2;
+    const verts = contour.map(([px,py])=>({x: x + (px-cx)*s, y: y + (py-cy)*s}));
+
+    // 凸分解付きで作成
+    const body = Bodies.fromVertices(x, y, [verts], {
+      render:{ sprite:{texture:url, xScale:s, yScale:s}},
+      friction:.35, frictionStatic:.65, restitution:.06, density:.002
+    }, true);
+    if(body) return body;
+
+    // 最終フォールバック：矩形
+    return Bodies.rectangle(x,y, (maxx-minx)*s, (maxy-miny)*s, {
+      render:{ sprite:{texture:url, xScale:s, yScale:s}},
+      friction:.35, frictionStatic:.65, restitution:.06, density:.002
     });
   }
 
-  function getConvexHull(points){
-    // Monotone chain
-    points.sort((a,b)=> a.x===b.x ? a.y-b.y : a.x-b.x);
-    const cross = (o,a,b)=>(a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
-    const lower=[];
-    for(const p of points){
-      while(lower.length>=2 && cross(lower[lower.length-2], lower[lower.length-1], p) <= 0) lower.pop();
-      lower.push(p);
+  /* ===== ピース生成（完全ランダム） ===== */
+  async function spawnPiece(){
+    if(state.dropping || state.over) return;
+    const x=cfg.w/2, y=120;
+    let body=null;
+
+    if(state.images.length){
+      const url = rand(state.images); // 偏り補正なし
+      try{ body = await bodyFromImageURL(url, x, y); }catch(e){ body=null; }
     }
-    const upper=[];
-    for(let i=points.length-1;i>=0;i--){
-      const p = points[i];
-      while(upper.length>=2 && cross(upper[upper.length-2], upper[upper.length-1], p) <= 0) upper.pop();
-      upper.push(p);
-    }
-    upper.pop(); lower.pop();
-    return lower.concat(upper);
-  }
-
-  async function createPieceBody(x,y){
-    const scale = cfg.pieceScale;
-
-    // 1) 画像ロード（pieceXX → peiceXX の順で探索）
-    let img=null;
-    try{
-      // ランダムで1~15のセットを選び、その2候補（piece / peice）を与える
-      const i = Math.floor(Math.random()*15); // 0-14
-      const pair = [imgList[i*2], imgList[i*2+1]];
-      img = await loadImageWithFallback(pair);
-    }catch(e){
-      img = null;
-    }
-
-    // 2) 画像から凸包を生成（失敗したらカラフルな丸/四角のフォールバック）
-    if(img){
-      const w = img.naturalWidth, h = img.naturalHeight;
-      const cvs = document.createElement('canvas');
-      cvs.width = w; cvs.height = h;
-      const ctx = cvs.getContext('2d');
-      ctx.drawImage(img,0,0);
-      const id = ctx.getImageData(0,0,w,h).data;
-
-      // ざっくりサンプリングして不透明ピクセルを収集
-      const step = Math.max(2, Math.floor(Math.min(w,h)/48));
-      const pts=[];
-      const alphaThr = 16;
-      for(let yy=0; yy<h; yy+=step){
-        for(let xx=0; xx<w; xx+=step){
-          const a = id[(yy*w+xx)*4+3];
-          if(a>alphaThr) pts.push({x:xx, y:yy});
-        }
-      }
-
-      if(pts.length>=3){
-        // 凸包 → スケールしてボディ化
-        const hull = getConvexHull(pts).map(p=>({x: x + (p.x - w/2)*scale, y: y + (p.y - h/2)*scale}));
-        // fromVertices はワールド座標を受け取れる
-        const body = Bodies.fromVertices(x, y, hull, {
-          render:{
-            sprite:{ texture: img.src, xScale: scale, yScale: scale }
-          },
-          friction: .35, frictionStatic: .65, restitution: .06, density: .002
-        }, true);
-        return body || Bodies.rectangle(x,y, w*scale, h*scale, {
-          render:{ sprite:{texture: img.src, xScale: scale, yScale: scale}},
-          friction:.35, frictionStatic:.65, restitution:.06, density:.002
-        });
-      }else{
-        // 画像はあるが輪郭取れない時は矩形
-        return Bodies.rectangle(x,y, w*scale, h*scale, {
-          render:{ sprite:{texture: img.src, xScale: scale, yScale: scale}},
-          friction:.35, frictionStatic:.65, restitution:.06, density:.002
-        });
-      }
-    }else{
-      // フォールバック：カラフル形状（ここでは scale を必ず定義済み）
-      const size = 88*scale;
-      return Bodies.polygon(x,y, (3+Math.floor(Math.random()*3)), size, {
+    if(!body){
+      // 画像失敗時フォールバック
+      const size = cfg.targetEdge;
+      body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, {
         render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') },
         friction:.5, frictionStatic:.7, restitution:.05, density:.002
       });
     }
+    Body.setStatic(body, true);
+    World.add(engine.world, body);
+    state.current = body;
   }
 
-  /* ---------- ピース生成/操作 ---------- */
-  async function spawnPiece(){
-    if(state.dropping || state.over) return;
-    const x = cfg.w/2, y = 120;
-    state.current = await createPieceBody(x,y);
-    Body.setStatic(state.current, true);     // 落とすまでは静的
-    World.add(engine.world, state.current);
-  }
-
+  /* ===== 操作・進行 ===== */
   function movePiece(dx){
     if(!state.current || state.dropping) return;
     const nx = Math.max(30, Math.min(cfg.w-30, state.current.position.x + dx));
     Body.setPosition(state.current, {x:nx, y:state.current.position.y});
   }
-
   function rotatePiece(){
     if(!state.current || state.dropping) return;
     Body.rotate(state.current, Math.PI/3); // 60°
   }
-
   function dropPiece(){
     if(!state.current || state.dropping || state.over) return;
     Body.setStatic(state.current, false);
     state.dropping = true;
     state.pieces.push(state.current);
-
-    // 次のピース準備（簡易：少し時間を置いてから）
     setTimeout(async ()=>{
       if(state.over) return;
-      state.score++;
-      updateScore();
-      if(state.score >= cfg.maxPieces){
-        win();
-      }else{
-        state.dropping = false;
-        state.current = null;
-        spawnPiece();
-      }
+      state.score++; updateScore();
+      if(state.score >= cfg.maxPieces){ win(); }
+      else{ state.dropping=false; state.current=null; spawnPiece(); }
     }, 900);
   }
 
-  /* ---------- 落下監視（毎フレーム） ---------- */
+  /* ===== 落下監視 ===== */
   function checkFalls(){
     if(state.over) return;
     const thresholdY = cfg.h + cfg.fallKillMargin;
     const left = base.position.x - baseW/2;
-    const right = base.position.x + baseW/2;
-
+    const right= base.position.x + baseW/2;
     for(const b of state.pieces){
-      // 画面外の落下
-      if(b.position.y > thresholdY){
-        lose(`${state.score}個で落下…`);
-        return;
-      }
-      // 土台より明確に下に落ちた＆土台の外側なら負け
-      if(b.position.y > base.position.y + 28 && (b.position.x < left || b.position.x > right)){
-        lose(`${state.score}個で土台から落下…`);
-        return;
+      if(b.position.y > thresholdY){ return lose(`${state.score}個で落下…`); }
+      if(b.position.y > base.position.y + 28 && (b.position.x<left || b.position.x>right)){
+        return lose(`${state.score}個で土台から落下…`);
       }
     }
   }
-  Events.on(engine, 'afterUpdate', checkFalls);
+  Events.on(engine,'afterUpdate', checkFalls);
 
-  /* ---------- カメラ（縦方向の簡易追尾） ---------- */
-  function updateCamera(){
-    // 一番上のピースのY（小さいほど上）
+  /* ===== 縦カメラ ===== */
+  (function cam(){
     let minY = base.position.y;
-    for(const b of state.pieces){
-      if(b.position.y < minY) minY = b.position.y;
-    }
-    // 上に高く積まれたら少し上にパン
+    for(const b of state.pieces){ if(b.position.y < minY) minY = b.position.y; }
     const marginTop = 100;
     const desiredMinY = Math.min(0, minY - marginTop);
-    const currentMinY = render.bounds.min.y;
-    const dy = (desiredMinY - currentMinY) * 0.1; // イージング
-    if(Math.abs(dy) > 0.5){
-      const min = {x:0, y: currentMinY + dy};
-      const max = {x:cfg.w, y: min.y + cfg.h};
-      render.bounds.min = min; render.bounds.max = max;
-      const scaleX = canvas.width / cfg.w;
-      const scaleY = canvas.height / cfg.h;
-      const context = render.context;
-      context.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    const curMinY = render.bounds.min.y;
+    const dy = (desiredMinY - curMinY)*0.1;
+    if(Math.abs(dy)>0.5){
+      const min={x:0,y:curMinY+dy}, max={x:cfg.w, y:min.y+cfg.h};
+      render.bounds.min=min; render.bounds.max=max;
+      const ctx = render.context;
+      const sx = canvas.width/cfg.w, sy=canvas.height/cfg.h;
+      ctx.setTransform(sx,0,0,sy,0,0);
     }
-    requestAnimationFrame(updateCamera);
-  }
-  requestAnimationFrame(updateCamera);
+    requestAnimationFrame(cam);
+  })();
 
-  /* ---------- 勝敗 ---------- */
-  function win(){
-    state.over = true;
-    ov.classList.add('show');
-    ovCard.classList.add('win');
-    ovTitle.textContent = 'クリア！';
-    ovMsg.textContent = `見事 ${cfg.maxPieces} 個積み上げました！`;
-    ovBtn.textContent = 'もう一度';
-    updateScore();
-  }
-
-  function lose(msg){
-    state.over = true;
-    ov.classList.add('show');
-    ovCard.classList.add('lose');
-    ovTitle.textContent = 'ゲームオーバー';
-    ovMsg.textContent = msg || `${state.score}個で崩れてしまいました`;
-    ovBtn.textContent = 'リトライ';
-  }
-
+  /* ===== 勝ち負け／リセット ===== */
+  const ov=$('#ov'), ovCard=$('#ovCard'), ovTitle=$('#ovTitle'), ovMsg=$('#ovMsg'), ovBtn=$('#ovBtn');
+  function win(){ state.over=true; ov.classList.add('show'); ovCard.classList.add('win');
+    ovTitle.textContent='クリア！'; ovMsg.textContent=`見事 ${cfg.maxPieces} 個積み上げました！`; ovBtn.textContent='もう一度'; }
+  function lose(msg){ state.over=true; ov.classList.add('show'); ovCard.classList.add('lose');
+    ovTitle.textContent='ゲームオーバー'; ovMsg.textContent=msg||`${state.score}個で崩れてしまいました`; ovBtn.textContent='リトライ'; }
   function reset(){
-    // 世界を初期化
-    World.clear(engine.world, false);
-    Engine.clear(engine);
-    // 重力/ランナーは維持、ベースと壁を戻す
-    engine.world.gravity.y = cfg.gravity;
-    World.add(engine.world,[base,wallL,wallR]);
-
-    // 状態リセット
-    state.score = 0; state.current = null; state.dropping=false; state.over=false; state.pieces.length=0;
-    render.bounds.min = {x:0,y:0}; render.bounds.max = {x:cfg.w,y:cfg.h};
-    updateScore();
-    spawnPiece();
+    World.clear(engine.world, false); Engine.clear(engine);
+    engine.world.gravity.y = cfg.gravity; World.add(engine.world,[base,wallL,wallR]);
+    state.score=0; state.current=null; state.dropping=false; state.over=false; state.pieces.length=0;
+    render.bounds.min={x:0,y:0}; render.bounds.max={x:cfg.w,y:cfg.h}; updateScore(); spawnPiece();
   }
 
-  /* ---------- 入力 ---------- */
-  const press = (el, fnDown, fnUp)=>{
+  /* ===== 入力 ===== */
+  const press=(el,down)=>{
     let t=null;
-    const start=(e)=>{e.preventDefault(); if(t)clearInterval(t); fnDown(); t=setInterval(fnDown, 50)};
-    const stop =()=>{ if(t){clearInterval(t); t=null} };
-    el.addEventListener('mousedown', start); el.addEventListener('touchstart', start, {passive:false});
-    el.addEventListener('mouseup', stop); el.addEventListener('mouseleave', stop);
-    el.addEventListener('touchend', stop); el.addEventListener('touchcancel', stop);
+    const start=e=>{e.preventDefault(); if(t)clearInterval(t); down(); t=setInterval(down,50)};
+    const stop =()=>{if(t){clearInterval(t);t=null}};
+    el.addEventListener('mousedown',start); el.addEventListener('touchstart',start,{passive:false});
+    el.addEventListener('mouseup',stop); el.addEventListener('mouseleave',stop);
+    el.addEventListener('touchend',stop); el.addEventListener('touchcancel',stop);
   };
   press(document.getElementById('left'), ()=>movePiece(-6));
   press(document.getElementById('right'),()=>movePiece( 6));
   document.getElementById('rot').addEventListener('click', rotatePiece);
   document.getElementById('drop').addEventListener('click', dropPiece);
-
-  document.addEventListener('keydown', (e)=>{
+  document.addEventListener('keydown', e=>{
     if(e.key==='ArrowLeft') movePiece(-6);
     if(e.key==='ArrowRight') movePiece(6);
     if(e.key===' '){ e.preventDefault(); dropPiece(); }
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E') rotatePiece();
     if(e.key==='r'||e.key==='R') if(state.over) reset();
   });
-
   window.addEventListener('resize', ()=>{
-    cfg.w = window.innerWidth; cfg.h = window.innerHeight;
-    render.options.width = cfg.w; render.options.height = cfg.h;
-    render.canvas.width = cfg.w; render.canvas.height = cfg.h;
+    render.canvas.width = (cfg.w=innerWidth);
+    render.canvas.height= (cfg.h=innerHeight);
   });
 
-  /* ---------- オーバーレイ ---------- */
-  ovBtn.addEventListener('click', ()=>{
-    ov.classList.remove('show');
+  /* ===== 起動：まず画像検出 → スタート ===== */
+  (async ()=>{
+    await findAllImages(); // ここで .png.png も拾う
+  })();
+
+  document.getElementById('ovBtn').addEventListener('click', ()=>{
+    document.getElementById('ov').classList.remove('show');
     if(state.over) reset(); else spawnPiece();
   });
 
-  // 起動
   updateScore();
 })();
 </script>
