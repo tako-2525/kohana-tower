@@ -8,7 +8,6 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none}
   html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
   body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
-  /* 雲 */
   .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08))}
   .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
   .c1{width:120px;height:44px;top:14%;animation:flow 22s linear infinite}
@@ -17,23 +16,19 @@
   .c2::before{width:68px;height:42px;right:18px;top:-20px}
   @keyframes flow{0%{left:-140px}100%{left:110%}}
 
-  /* Canvas */
   #game{position:fixed;inset:0;display:block;width:100%;height:100%}
 
-  /* ステータス */
   #status{position:fixed;top:10px;left:50%;transform:translateX(-50%);
     background:rgba(255,255,255,.95);border-radius:22px;padding:8px 14px;display:flex;gap:14px;align-items:center;z-index:10}
   .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333}
   .si .v{font-size:18px;color:#FF6B6B}
 
-  /* 操作ボタン（バーではなくボタンだけ） */
   #ctrl{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:14px;z-index:10}
   .btn{width:62px;height:62px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
     display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(0,0,0,.12);cursor:pointer;touch-action:manipulation}
   .btn:active{transform:scale(.96)}
   .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:14px}
 
-  /* オーバーレイ */
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.66);display:none;align-items:center;justify-content:center;z-index:20}
   .ov.show{display:flex}
   .card{background:#fff;border-radius:28px;padding:32px 24px;max-width:min(480px,90%);text-align:center;box-shadow:0 18px 36px rgba(0,0,0,.28)}
@@ -43,25 +38,19 @@
   .card.win h1{color:#4ECDC4}
   .card.lose h1{color:#95A5A6}
 </style>
-<!-- 物理エンジン -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-<!-- 凸分解（Bodies.fromVertices用） -->
 <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
 <script>window.decomp = decomp;</script>
 </head>
 <body>
-  <!-- 背景の雲 -->
-  <div class="cloud c1"></div>
-  <div class="cloud c2"></div>
+  <div class="cloud c1"></div><div class="cloud c2"></div>
 
-  <!-- ステータス -->
   <div id="status">
     <div class="si"><span>スコア</span><span id="score" class="v">0</span></div>
     <div class="si"><span>ハイスコア</span><span id="hiscore" class="v">0</span></div>
     <div class="si"><span>画像</span><span id="imgcnt" class="v">0</span></div>
   </div>
 
-  <!-- 操作ボタン -->
   <div id="ctrl">
     <button id="left"  class="btn" aria-label="左に動かす">◀</button>
     <button id="rot"   class="btn" aria-label="60度回転">↻</button>
@@ -69,10 +58,8 @@
     <button id="right" class="btn" aria-label="右に動かす">▶</button>
   </div>
 
-  <!-- ゲーム -->
   <canvas id="game"></canvas>
 
-  <!-- オーバーレイ（開始/勝敗） -->
   <div id="ov" class="ov show">
     <div class="card" id="ovCard">
       <h1 id="ovTitle">こはなタワー</h1>
@@ -83,29 +70,28 @@
 
 <script>
 (()=>{
-  const {Engine,Render,Runner,World,Bodies,Body,Events} = Matter;
+  const {Engine,Render,Runner,World,Bodies,Body,Events,Composite} = Matter;
 
-  /* ===== 設定 ===== */
+  /* ===== 基本設定 ===== */
   const cfg = {
     w: innerWidth, h: innerHeight,
     gravity: 1.0,
     maxPieces: 15,
-    targetEdge: 120,   // 画像の長辺がこのサイズになるよう自動スケール
+    targetEdge: 120,   // 画像長辺をこのサイズに
     baseYRatio: 0.75,
     fallKillMargin: 80
   };
 
-  /* ===== 状態（厳密なフェーズ管理） ===== */
+  /* ===== フェーズ管理 ===== */
   const PHASE = { READY:'READY', AIM:'AIM', DROP:'DROP', SETTLE:'SETTLE', OVER:'OVER' };
   const state = {
     phase: PHASE.READY,
     score: 0,
     hiscore: Number(localStorage.getItem('kohana.hiscore')||0),
-    current: null,
+    current: null,                // これが存在する間は絶対に新規生成しない
     pieces: [],
     images: [],
     imagesReady: false,
-    // 安定判定
     stableFrames: 0
   };
 
@@ -115,7 +101,6 @@
   const btnLeft = $('#left'), btnRight = $('#right'), btnRot = $('#rot'), btnDrop = $('#drop');
   const ov = $('#ov'), ovCard=$('#ovCard'), ovTitle=$('#ovTitle'), ovMsg=$('#ovMsg'), ovBtn=$('#ovBtn');
   hisEl.textContent = state.hiscore;
-
   function updateScore(){
     scoreEl.textContent = state.score;
     if(state.score>state.hiscore){
@@ -125,52 +110,41 @@
     }
   }
   function setButtonsEnabled(en){
-    btnLeft.disabled = btnRight.disabled = btnRot.disabled = btnDrop.disabled = !en;
-    btnLeft.style.opacity = btnRight.style.opacity = btnRot.style.opacity = btnDrop.style.opacity = en?1:0.4;
+    [btnLeft,btnRight,btnRot,btnDrop].forEach(b=>{ b.disabled=!en; b.style.opacity=en?1:0.4; });
   }
 
-  /* ===== 画像検出（名前ゆれ吸収） ===== */
+  /* ===== 画像検出（名前ゆれ対応） ===== */
   function candidatesFor(i){
     const nn = String(i).padStart(2,'0');
     const bases = [
-      `piece${nn}.png`,`piece_${nn}.png`,`peice${nn}.png`,
-      `piece${i}.png`
+      `piece${nn}.png`,`piece_${nn}.png`,`peice${nn}.png`,`piece${i}.png`
     ];
     const exts=['png','PNG'];
-    const doubles = bases.flatMap(n=>[`${n}.png`,`${n}.PNG`]); // .png.png 等
+    const doubles = bases.flatMap(n=>[`${n}.png`,`${n}.PNG`]);
     const all = [
       ...bases.flatMap(n=>exts.map(e=>`${n.replace(/\.png$/,'')}.${e}`)),
       ...doubles
     ];
     return all.map(n=>`images/${n}`);
   }
-  function testImage(url){
-    return new Promise(res=>{
-      const img = new Image();
-      img.onload = ()=>res(url);
-      img.onerror = ()=>res(null);
-      img.src = url;
-    });
-  }
+  const testImage = url => new Promise(res=>{ const img=new Image(); img.onload=()=>res(url); img.onerror=()=>res(null); img.src=url; });
   async function findAllImages(){
     const found=[];
     for(let i=1;i<=cfg.maxPieces;i++){
-      const list = candidatesFor(i);
       let ok=null;
-      for(const u of list){ ok = await testImage(u); if(ok) break; }
+      for(const u of candidatesFor(i)){ ok = await testImage(u); if(ok) break; }
       if(ok) found.push(ok);
     }
     state.images = found;
     state.imagesReady = true;
     imgCntEl.textContent = `${found.length}/${cfg.maxPieces}`;
   }
-  const rand = arr => arr[Math.floor(Math.random()*arr.length)]; // 完全ランダム
+  const rand = arr => arr[Math.floor(Math.random()*arr.length)];
 
   /* ===== Matter.js ===== */
   const canvas = document.getElementById('game');
   const engine = Engine.create();
   engine.world.gravity.y = cfg.gravity;
-
   const render = Render.create({
     canvas, engine,
     options:{ width:cfg.w, height:cfg.h, background:'transparent', wireframes:false,
@@ -179,11 +153,10 @@
   Render.run(render);
   Runner.run(Runner.create(), engine);
 
-  /* 土台と壁 */
   const baseW = Math.round(cfg.w*0.66), baseH=22, baseY = Math.round(cfg.h*cfg.baseYRatio);
-  const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {isStatic:true, render:{fillStyle:'#8B7355'}});
-  const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
-  const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
+  const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {isStatic:true, render:{fillStyle:'#8B7355'}, label:'base'});
+  const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
+  const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
   World.add(engine.world,[base,wallL,wallR]);
 
   /* ===== 画像→輪郭→凸分解 ===== */
@@ -192,173 +165,130 @@
     const x=c.getContext('2d'); x.drawImage(img,0,0); return x.getImageData(0,0,c.width,c.height);
   }
   function traceContour(bin,w,h){
-    const idx=(x,y)=>y*w+x;
-    const inB=(x,y)=>x>=0&&y>=0&&x<w&&y<h;
+    const idx=(x,y)=>y*w+x, inB=(x,y)=>x>=0&&y>=0&&x<w&&y<h;
     let sx=-1, sy=-1;
-    outer: for(let y=0;y<h;y++){
-      for(let x=0;x<w;x++){
-        if(bin[idx(x,y)] && (
-          !inB(x-1,y)||!bin[idx(x-1,y)] ||
-          !inB(x+1,y)||!bin[idx(x+1,y)] ||
-          !inB(x,y-1)||!bin[idx(x,y-1)] ||
-          !inB(x,y+1)||!bin[idx(x,y+1)]
-        )){ sx=x; sy=y; break outer; }
-      }
-    }
+    outer: for(let y=0;y<h;y++){ for(let x=0;x<w;x++){
+      if(bin[idx(x,y)] && (!inB(x-1,y)||!bin[idx(x-1,y)] || !inB(x+1,y)||!bin[idx(x+1,y)] || !inB(x,y-1)||!bin[idx(x,y-1)] || !inB(x,y+1)||!bin[idx(x,y+1)])){ sx=x; sy=y; break outer; }
+    }}
     if(sx<0) return [];
     const dirs=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
-    let x=sx,y=sy, di=0, loop=0;
-    const path=[];
+    let x=sx,y=sy, di=0, loop=0; const path=[];
     do{
-      path.push([x,y]);
-      let found=false;
-      for(let k=0;k<8;k++){
-        const ni=(di+k+7)%8;
-        const nx=x+dirs[ni][0], ny=y+dirs[ni][1];
-        if(inB(nx,ny) && bin[idx(nx,ny)]){ x=nx; y=ny; di=ni; found=true; break; }
-      }
-      if(!found) break;
-      loop++; if(loop> w*h*4) break;
+      path.push([x,y]); let found=false;
+      for(let k=0;k<8;k++){ const ni=(di+k+7)%8; const nx=x+dirs[ni][0], ny=y+dirs[ni][1];
+        if(inB(nx,ny) && bin[idx(nx,ny)]){ x=nx; y=ny; di=ni; found=true; break; }}
+      if(!found) break; loop++; if(loop>w*h*4) break;
     }while(!(x===sx && y===sy && path.length>1));
     return path;
   }
   function simplifyRDP(pts, eps){
     if(pts.length<3) return pts;
-    const [sx,sy]=pts[0], [ex,ey]=pts.at(-1);
-    const A=ey-sy, B=sx-ex, C=ex*sy - ey*sx;
+    const [sx,sy]=pts[0], [ex,ey]=pts.at(-1); const A=ey-sy,B=sx-ex,C=ex*sy-ey*sx;
     let dmax=0, idx=-1;
-    for(let i=1;i<pts.length-1;i++){
-      const [x,y]=pts[i]; const d=Math.abs(A*x+B*y+C)/Math.hypot(A,B);
-      if(d>dmax){dmax=d; idx=i;}
-    }
+    for(let i=1;i<pts.length-1;i++){ const [x,y]=pts[i]; const d=Math.abs(A*x+B*y+C)/Math.hypot(A,B); if(d>dmax){dmax=d; idx=i;} }
     if(dmax<=eps) return [pts[0], pts.at(-1)];
-    const left = simplifyRDP(pts.slice(0,idx+1), eps);
-    const right= simplifyRDP(pts.slice(idx), eps);
-    return left.slice(0,-1).concat(right);
+    const L=simplifyRDP(pts.slice(0,idx+1),eps), R=simplifyRDP(pts.slice(idx),eps);
+    return L.slice(0,-1).concat(R);
   }
   async function bodyFromImageURL(url, x, y){
     const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
-    const id = getImageData(img);
-    const w=id.width, h=id.height, data=id.data;
+    const id = getImageData(img); const w=id.width, h=id.height, data=id.data;
 
-    // 透過マスク（ダウンサンプル）
     const step = Math.max(2, Math.floor(Math.min(w,h)/64));
-    const bin = new Uint8Array(w*h);
-    const thr = 16;
-    for(let yy=0; yy<h; yy+=step){
-      for(let xx=0; xx<w; xx+=step){
-        const a = data[(yy*w+xx)*4+3];
-        if(a>thr){
-          for(let dy=0;dy<step && yy+dy<h;dy++){
-            for(let dx=0;dx<step && xx+dx<w;dx++){
-              bin[(yy+dy)*w+(xx+dx)] = 1;
-            }
-          }
-        }
-      }
-    }
+    const bin = new Uint8Array(w*h); const thr=16;
+    for(let yy=0; yy<h; yy+=step){ for(let xx=0; xx<w; xx+=step){
+      const a = data[(yy*w+xx)*4+3];
+      if(a>thr){ for(let dy=0;dy<step && yy+dy<h;dy++){ for(let dx=0;dx<step && xx+dx<w;dx++){ bin[(yy+dy)*w+(xx+dx)]=1; } } }
+    }}
     let contour = traceContour(bin,w,h);
     if(contour.length<8){
-      // 取れない場合は矩形スプライト
       const s = cfg.targetEdge / Math.max(w,h);
-      return Bodies.rectangle(x,y, w*s, h*s, {
-        render:{ sprite:{texture:url, xScale:s, yScale:s}},
-        friction:.35, frictionStatic:.65, restitution:.06, density:.002
-      });
+      return Bodies.rectangle(x,y, w*s, h*s, { render:{ sprite:{texture:url, xScale:s, yScale:s}}, friction:.35, frictionStatic:.65, restitution:.06, density:.002, label:'piece' });
     }
     contour = simplifyRDP(contour, Math.max(2, Math.min(w,h)/80));
-
-    // スケール（長辺を targetEdge に）
     const minx=Math.min(...contour.map(p=>p[0])), maxx=Math.max(...contour.map(p=>p[0]));
     const miny=Math.min(...contour.map(p=>p[1])), maxy=Math.max(...contour.map(p=>p[1]));
-    const longEdge = Math.max(maxx-minx, maxy-miny) || 1;
-    const s = cfg.targetEdge / longEdge;
-
-    // 中心合わせ → ワールド座標へ
-    const cx = (minx+maxx)/2, cy=(miny+maxy)/2;
+    const s = cfg.targetEdge / Math.max(maxx-minx, maxy-miny || 1);
+    const cx=(minx+maxx)/2, cy=(miny+maxy)/2;
     const verts = contour.map(([px,py])=>({x: x + (px-cx)*s, y: y + (py-cy)*s}));
 
-    // 凸分解付き fromVertices
     const body = Bodies.fromVertices(x, y, [verts], {
       render:{ sprite:{texture:url, xScale:s, yScale:s}},
-      friction:.35, frictionStatic:.65, restitution:.06, density:.002
+      friction:.35, frictionStatic:.65, restitution:.06, density:.002, label:'piece'
     }, true);
-    if(body) return body;
-
-    // 最終フォールバック：矩形
-    return Bodies.rectangle(x,y, (maxx-minx)*s, (maxy-miny)*s, {
-      render:{ sprite:{texture:url, xScale:s, yScale:s}},
-      friction:.35, frictionStatic:.65, restitution:.06, density:.002
-    });
+    return body || Bodies.rectangle(x,y,(maxx-minx)*s,(maxy-miny)*s,{ render:{ sprite:{texture:url, xScale:s, yScale:s}}, friction:.35, frictionStatic:.65, restitution:.06, density:.002, label:'piece' });
   }
 
-  /* ===== フェーズ遷移 ===== */
-  function gotoPhase(p){ state.phase = p; }
-
-  /* ===== ピース生成（AIMのみ、1個だけ） ===== */
-  let spawnLock = false;
+  /* ===== スポーン（AIM中のみ・1個だけ） ===== */
   async function spawnPiece(){
-    if(spawnLock) return;
     if(state.phase!==PHASE.AIM) return;
-    if(state.current){ World.remove(engine.world, state.current); state.current=null; }
+    if(state.current) return;                // ★二重生成ガード（最重要）
 
-    spawnLock = true;
-    // 塔の最上部よりさらに上にスポーン
     const topY = state.pieces.length ? Math.min(...state.pieces.map(b => b.position.y)) : base.position.y;
-    const y = Math.min(120, topY - 160);   // 120 か、最上部から160px上
+    const y = Math.min(120, topY - 160);
     const x = cfg.w/2;
 
     let body=null;
     if(state.images.length){
-      const url = (arr=>arr[Math.floor(Math.random()*arr.length)])(state.images); // 完全ランダム
+      const url = rand(state.images);       // 完全ランダム選択
       try{ body = await bodyFromImageURL(url, x, y); }catch(e){ body=null; }
     }
     if(!body){
-      // 画像失敗時フォールバック
       const size = cfg.targetEdge;
-      body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, {
-        render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') },
-        friction:.5, frictionStatic:.7, restitution:.05, density:.002
-      });
+      body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, { render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') }, friction:.5, frictionStatic:.7, restitution:.05, density:.002, label:'piece' });
     }
-    Body.setStatic(body, true); // ドロップするまで静的
+    Body.setStatic(body, true);
+    body.label = 'currentPiece';            // ★現在ピースのラベル
     World.add(engine.world, body);
     state.current = body;
-    spawnLock = false;
   }
 
   /* ===== 操作 ===== */
   function movePiece(dx){
-    if(state.phase!==PHASE.AIM) return;
-    if(!state.current) return;
+    if(state.phase!==PHASE.AIM || !state.current) return;
     const nx = Math.max(30, Math.min(cfg.w-30, state.current.position.x + dx));
     Body.setPosition(state.current, {x:nx, y:state.current.position.y});
   }
   function rotatePiece(){
-    if(state.phase!==PHASE.AIM) return;
-    if(!state.current) return;
-    Body.rotate(state.current, Math.PI/3); // 60°
+    if(state.phase!==PHASE.AIM || !state.current) return;
+    Body.rotate(state.current, Math.PI/3);
   }
   function dropPiece(){
-    if(state.phase!==PHASE.AIM) return;
-    if(!state.current) return;
-    Body.setStatic(state.current, false);     // ここで物理解放
+    if(state.phase!==PHASE.AIM || !state.current) return;
+    Body.setStatic(state.current, false);
+    state.current.label = 'piece';          // もう通常ピース扱い
     state.pieces.push(state.current);
-    state.current = null;
-    gotoPhase(PHASE.DROP);
-    setButtonsEnabled(false);                 // DROP中は操作不可
-    state.stableFrames = 0;                   // 安定カウンタ初期化
+    state.current = null;                   // ★ここで必ず解放
+    state.phase = PHASE.DROP;
+    setButtonsEnabled(false);
+    state.stableFrames = 0;
   }
 
-  /* ===== 毎フレーム：落下/安定判定 & 次ターン生成 ===== */
-  const STABLE_NEED = 50; // 連続フレーム（約0.8s）
-  const VEL_THR = 0.16;   // 速度閾値
-  const ANG_THR = 0.02;   // 角速度閾値
+  /* ===== 毎フレーム：落下/安定判定 & 余分掃除 ===== */
+  const STABLE_NEED = 50;
+  const VEL_THR = 0.16;
+  const ANG_THR = 0.02;
 
-  Events.on(engine, 'afterUpdate', ()=>{
+  function cleanupExtraCurrents(){
+    if(state.phase!==PHASE.AIM) return;
+    const currents = Composite.allBodies(engine.world).filter(b=>b.label==='currentPiece');
+    if(currents.length>1){
+      // 先頭以外は削除（保険）
+      for(let i=1;i<currents.length;i++){ World.remove(engine.world, currents[i]); }
+    }
+    // state.current がワールドに存在しない時は再取得
+    if(!state.current || state.current.label!=='currentPiece'){
+      state.current = currents[0] || null;
+    }
+  }
+
+  Events.on(engine,'afterUpdate', ()=>{
     if(state.phase===PHASE.OVER) return;
 
-    // 落下チェック（場外 or 土台外）
+    // 余分な現在ピースの掃除（念のため）
+    cleanupExtraCurrents();
+
+    // 落下チェック
     const thresholdY = cfg.h + cfg.fallKillMargin;
     const left = base.position.x - baseW/2;
     const right= base.position.x + baseW/2;
@@ -369,24 +299,22 @@
       }
     }
 
-    // 安定判定（DROP/SETTLE のみ）
+    // 安定判定
     if(state.phase===PHASE.DROP || state.phase===PHASE.SETTLE){
       let allSlow = true;
       for(const b of state.pieces){
         if(b.isStatic) continue;
-        if(b.speed > VEL_THR || Math.abs(b.angularVelocity) > ANG_THR){ allSlow = false; break; }
+        if(b.speed > VEL_THR || Math.abs(b.angularVelocity) > ANG_THR){ allSlow=false; break; }
       }
       state.stableFrames = allSlow ? state.stableFrames + 1 : 0;
+      state.phase = allSlow ? PHASE.SETTLE : PHASE.DROP;
 
       if(state.stableFrames >= STABLE_NEED){
         state.score++; updateScore();
         if(state.score >= cfg.maxPieces){ return win(); }
-        // 次ターンへ
-        gotoPhase(PHASE.AIM);
+        state.phase = PHASE.AIM;
         setButtonsEnabled(true);
-        spawnPiece();                 // 次の“1個だけ”を生成
-      }else{
-        gotoPhase(PHASE.SETTLE);
+        spawnPiece(); // 次の1個だけ
       }
     }
   });
@@ -402,8 +330,7 @@
     if(Math.abs(dy)>0.5){
       const min={x:0,y:curMinY+dy}, max={x:cfg.w, y:min.y+cfg.h};
       render.bounds.min=min; render.bounds.max=max;
-      const ctx = render.context;
-      const sx = canvas.width/cfg.w, sy=canvas.height/cfg.h;
+      const ctx = render.context, sx = canvas.width/cfg.w, sy=canvas.height/cfg.h;
       ctx.setTransform(sx,0,0,sy,0,0);
     }
     requestAnimationFrame(cam);
@@ -411,21 +338,18 @@
 
   /* ===== 勝敗・リセット ===== */
   function win(){
-    gotoPhase(PHASE.OVER);
-    ov.classList.add('show'); ovCard.classList.add('win');
+    state.phase=PHASE.OVER; ov.classList.add('show'); ovCard.classList.add('win');
     ovTitle.textContent='クリア！'; ovMsg.textContent=`見事 ${cfg.maxPieces} 個積み上げました！`; ovBtn.textContent='もう一度';
   }
   function lose(msg){
-    gotoPhase(PHASE.OVER);
-    ov.classList.add('show'); ovCard.classList.add('lose');
+    state.phase=PHASE.OVER; ov.classList.add('show'); ovCard.classList.add('lose');
     ovTitle.textContent='ゲームオーバー'; ovMsg.textContent=msg||`${state.score}個で崩れてしまいました`; ovBtn.textContent='リトライ';
   }
   function reset(){
     World.clear(engine.world, false); Engine.clear(engine);
     engine.world.gravity.y = cfg.gravity; World.add(engine.world,[base,wallL,wallR]);
-    state.score=0; state.current=null; state.pieces.length=0; state.stableFrames=0;
-    gotoPhase(PHASE.AIM);
-    setButtonsEnabled(true);
+    state.score=0; state.pieces.length=0; state.current=null; state.stableFrames=0;
+    state.phase=PHASE.AIM; setButtonsEnabled(true);
     render.bounds.min={x:0,y:0}; render.bounds.max={x:cfg.w,y:cfg.h};
     updateScore(); spawnPiece();
   }
@@ -448,7 +372,7 @@
     if(e.key==='ArrowLeft') movePiece(-6);
     if(e.key==='ArrowRight') movePiece(6);
     if(e.key===' '){ e.preventDefault(); dropPiece(); }
-    if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E') rotatePiece();
+    if(['q','Q','e','E'].includes(e.key)) rotatePiece();
     if(e.key==='r'||e.key==='R'){ if(state.phase===PHASE.OVER) reset(); }
   });
 
@@ -457,19 +381,19 @@
     render.canvas.height= (cfg.h=innerHeight);
   });
 
-  /* ===== 起動フロー ===== */
+  /* ===== 起動 ===== */
   ovBtn.addEventListener('click', async ()=>{
     ov.classList.remove('show');
-    if(!state.imagesReady){ await findAllImages(); }
+    if(!state.imagesReady) await findAllImages();
     if(state.phase===PHASE.OVER){ reset(); return; }
-    gotoPhase(PHASE.AIM);
-    setButtonsEnabled(true);
-    spawnPiece();  // 最初の1個だけ
+    if(state.phase===PHASE.READY){
+      state.phase=PHASE.AIM; setButtonsEnabled(true); spawnPiece();
+    }
   });
 
-  // 初期更新
   updateScore();
 })();
 </script>
 </body>
 </html>
+
