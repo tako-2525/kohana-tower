@@ -42,7 +42,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
 <script>
-  // Bodies.fromVertices が凸分解に decomp を使えるようにする
+  // Bodies.fromVertices で decomp を使えるように
   window.decomp = decomp;
   if (Matter && Matter.Common && Matter.Common.setDecomp) {
     Matter.Common.setDecomp(decomp);
@@ -89,7 +89,7 @@
     fallKillMargin: 80
   };
 
-  /* ===== フェーズ管理 ===== */
+  /* ===== フェーズ ===== */
   const PHASE = { READY:'READY', AIM:'AIM', DROP:'DROP', SETTLE:'SETTLE', OVER:'OVER' };
   const state = {
     phase: PHASE.READY,
@@ -164,7 +164,7 @@
   const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
   World.add(engine.world,[base,wallL,wallR]);
 
-  /* ===== 画像→輪郭→凸分解（スプライト重複描画対策込み） ===== */
+  /* ===== 画像→輪郭→凸分解（“1枚だけ描画”版） ===== */
   function getImageData(img){
     const c=document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight;
     const x=c.getContext('2d'); x.drawImage(img,0,0); return x.getImageData(0,0,c.width,c.height);
@@ -213,13 +213,11 @@
       if(a>thr){ for(let dy=0;dy<step && yy+dy<h;dy++){ for(let dx=0;dx<step && xx+dx<w;dx++){ bin[(yy+dy)*w+(xx+dx)]=1; } } }
     }}
     let contour = traceContour(bin,w,h);
+    const matOpts = { friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece' };
+
     if(contour.length<8){
       const s = cfg.targetEdge / Math.max(w,h);
-      // 矩形＋スプライト（パーツ1個なので重複描画なし）
-      return Bodies.rectangle(x,y, w*s, h*s, {
-        render:{ sprite:{texture:url, xScale:s, yScale:s}},
-        friction:.45, frictionStatic:.75, restitution:.03, density:.0025, label:'piece'
-      });
+      return Bodies.rectangle(x,y, w*s, h*s, { render:{ sprite:{texture:url, xScale:s, yScale:s}}, ...matOpts });
     }
     contour = ccwAndDedup(simplifyRDP(contour, Math.max(2, Math.min(w,h)/80)));
 
@@ -229,18 +227,22 @@
     const cx=(minx+maxx)/2, cy=(miny+maxy)/2;
     const verts = contour.map(([px,py])=>({x: x + (px-cx)*s, y: y + (py-cy)*s}));
 
-    // 凸分解して複数パーツになる → スプライト重複描画を抑止
-    const body = Bodies.fromVertices(x, y, [verts], {
-      render:{ sprite:{texture:url, xScale:s, yScale:s}},
-      friction:.45, frictionStatic:.75, restitution:.03, density:.0025, label:'piece'
-    }, true);
-
+    const body = Bodies.fromVertices(x, y, [verts], { render:{}, ...matOpts }, true);
     if(body && body.parts && body.parts.length>1){
-      // part0だけ表示＆スプライト、以降のパーツは非表示・スプライト無し（当たり判定は有効）
+      // 子パーツの中で面積が最大のものだけにスプライトを付与（Matter.Render は part[1..] を描画するため）
+      let mainIndex = 1, maxArea = -1;
       for(let i=1;i<body.parts.length;i++){
-        body.parts[i].render.visible = false;
-        body.parts[i].render.sprite = { texture: null };
+        const b = body.parts[i];
+        const a = (b.bounds.max.x-b.bounds.min.x)*(b.bounds.max.y-b.bounds.min.y);
+        if(a>maxArea){ maxArea=a; mainIndex=i; }
       }
+      for(let i=1;i<body.parts.length;i++){
+        body.parts[i].render.visible = (i===mainIndex);
+        body.parts[i].render.sprite = (i===mainIndex)? { texture:url, xScale:s, yScale:s } : null;
+      }
+    }else if(body){
+      // 単一パーツなら親にスプライト
+      body.render.sprite = { texture:url, xScale:s, yScale:s };
     }
     return body;
   }
@@ -252,7 +254,7 @@
     state.spawnBusy = true;
 
     const topY = state.pieces.length ? Math.min(...state.pieces.map(b => b.position.y)) : base.position.y;
-    const y = Math.min(120, topY - 160);
+    const y = Math.min(120, topY - 200); // 少し高めに
     const x = cfg.w/2;
 
     let body=null;
@@ -264,7 +266,7 @@
       const size = cfg.targetEdge;
       body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, {
         render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') },
-        friction:.5, frictionStatic:.75, restitution:.03, density:.0025, label:'piece'
+        friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece'
       });
     }
     Body.setStatic(body, true);
@@ -295,7 +297,7 @@
     setButtonsEnabled(false);
   };
 
-  /* ===== 物理ループ：落下/安定 & 余分掃除（保険） ===== */
+  /* ===== 物理：落下/安定 & 余分掃除 ===== */
   const STABLE_NEED = 55, VEL_THR = 0.15, ANG_THR = 0.02;
 
   function cleanupExtraCurrents(){
@@ -307,7 +309,6 @@
 
   Events.on(engine,'afterUpdate', ()=>{
     if(state.phase===PHASE.OVER) return;
-
     cleanupExtraCurrents();
 
     // 場外/土台外チェック
@@ -338,7 +339,7 @@
     }
   });
 
-  /* ===== カメラ（縦パン） ===== */
+  /* ===== カメラ ===== */
   ;(function cam(){
     let minY = base.position.y;
     for(const b of state.pieces){ if(b.position.y < minY) minY = b.position.y; }
