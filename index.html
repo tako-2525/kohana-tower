@@ -1,711 +1,422 @@
-<!DOCTYPE html>
+<!-- index.html（リポジトリ直下に1ファイル、これだけで動きます） -->
+<!doctype html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>こはなタワーバトル</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
-        }
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>こはなタワー</title>
+<style>
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-user-select:none; user-select:none}
+  html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+  body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
+  /* 雲 */
+  .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08))}
+  .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
+  .c1{width:120px;height:44px;top:14%;animation:flow 22s linear infinite}
+  .c1::before{width:60px;height:60px;left:14px;top:-26px}
+  .c2{width:92px;height:38px;top:36%;animation:flow 27s linear infinite .6s}
+  .c2::before{width:68px;height:42px;right:18px;top:-20px}
+  @keyframes flow{0%{left:-140px}100%{left:110%}}
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-            overflow: hidden;
-            background: linear-gradient(to bottom, #87CEEB 0%, #98D8E8 50%, #B0E0E6 100%);
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            touch-action: none;
-        }
+  /* Canvas */
+  #game{position:fixed;inset:0;display:block;width:100%;height:100%}
 
-        /* 雲のアニメーション */
-        .cloud {
-            position: absolute;
-            background: white;
-            border-radius: 100px;
-            opacity: 0.8;
-        }
+  /* ステータス */
+  #status{position:fixed;top:10px;left:50%;transform:translateX(-50%);
+    background:rgba(255,255,255,.95);border-radius:22px;padding:8px 14px;display:flex;gap:14px;align-items:center;z-index:10}
+  .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333}
+  .si .v{font-size:18px;color:#FF6B6B}
 
-        .cloud::before {
-            content: '';
-            position: absolute;
-            background: white;
-            border-radius: 100px;
-        }
+  /* 操作ボタン（バーではなくボタンだけ） */
+  #ctrl{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
+    display:flex;gap:14px;z-index:10}
+  .btn{width:62px;height:62px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(0,0,0,.12);cursor:pointer;touch-action:manipulation}
+  .btn:active{transform:scale(.96)}
+  .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:14px}
 
-        .cloud1 {
-            width: 100px;
-            height: 40px;
-            top: 20%;
-            animation: float 20s infinite;
-        }
-
-        .cloud1::before {
-            width: 50px;
-            height: 50px;
-            top: -25px;
-            left: 10px;
-        }
-
-        .cloud2 {
-            width: 80px;
-            height: 35px;
-            top: 40%;
-            animation: float 25s infinite;
-        }
-
-        .cloud2::before {
-            width: 60px;
-            height: 40px;
-            top: -20px;
-            right: 15px;
-        }
-
-        @keyframes float {
-            0% { left: -100px; }
-            100% { left: 100%; }
-        }
-
-        #gameCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-
-        /* ステータスバー */
-        #statusBar {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 25px;
-            padding: 10px 20px;
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            z-index: 100;
-        }
-
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .status-item .label {
-            font-size: 12px;
-            opacity: 0.7;
-        }
-
-        .status-item .value {
-            font-size: 18px;
-            color: #FF6B6B;
-        }
-
-        /* 操作パネル */
-        #controlPanel {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 15px;
-            z-index: 100;
-        }
-
-        .control-btn {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            border: 3px solid white;
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
-            font-size: 24px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: all 0.2s;
-        }
-
-        .control-btn:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .control-btn.primary {
-            width: 70px;
-            height: 70px;
-            background: linear-gradient(135deg, #FFD93D 0%, #FFB84D 100%);
-            border-color: #FFB84D;
-            color: white;
-            font-size: 14px;
-        }
-
-        /* オーバーレイ */
-        .overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .overlay.active {
-            display: flex;
-        }
-
-        .overlay-content {
-            background: white;
-            border-radius: 30px;
-            padding: 40px;
-            text-align: center;
-            max-width: 90%;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-
-        .overlay-content h1 {
-            font-size: 36px;
-            margin-bottom: 15px;
-            color: #FF6B6B;
-        }
-
-        .overlay-content p {
-            font-size: 16px;
-            margin-bottom: 25px;
-            color: #666;
-        }
-
-        .overlay-btn {
-            padding: 15px 40px;
-            font-size: 18px;
-            font-weight: bold;
-            color: white;
-            background: linear-gradient(135deg, #FFD93D 0%, #FFB84D 100%);
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s;
-        }
-
-        .overlay-btn:active {
-            transform: scale(0.95);
-        }
-
-        .overlay.win .overlay-content h1 { color: #4ECDC4; }
-        .overlay.lose .overlay-content h1 { color: #95A5A6; }
-
-        /* 土台 */
-        #platform {
-            position: absolute;
-            bottom: 120px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 200px;
-            height: 20px;
-            background: linear-gradient(to bottom, #8B7355 0%, #654321 100%);
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-        }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  /* オーバーレイ */
+  .ov{position:fixed;inset:0;background:rgba(0,0,0,.66);display:none;align-items:center;justify-content:center;z-index:20}
+  .ov.show{display:flex}
+  .card{background:#fff;border-radius:28px;padding:32px 24px;max-width:min(480px,90%);text-align:center;box-shadow:0 18px 36px rgba(0,0,0,.28)}
+  .card h1{font-size:34px;margin-bottom:8px;color:#4E7FFF}
+  .card p{font-size:15px;color:#666;margin-bottom:20px}
+  .big{padding:14px 32px;border-radius:22px;border:none;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);color:#fff;font-weight:800;font-size:18px;cursor:pointer}
+  .card.win h1{color:#4ECDC4}
+  .card.lose h1{color:#95A5A6}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 </head>
 <body>
-    <!-- 雲の装飾 -->
-    <div class="cloud cloud1"></div>
-    <div class="cloud cloud2"></div>
-    
-    <!-- ゲームキャンバス -->
-    <canvas id="gameCanvas"></canvas>
-    
-    <!-- ステータスバー -->
-    <div id="statusBar">
-        <div class="status-item">
-            <span class="label">スコア:</span>
-            <span id="score" class="value">0</span>
-        </div>
-        <div class="status-item">
-            <span class="label">ハイスコア:</span>
-            <span id="highScore" class="value">0</span>
-        </div>
-    </div>
-    
-    <!-- 操作ボタン -->
-    <div id="controlPanel">
-        <button id="btnLeft" class="control-btn">◀</button>
-        <button id="btnRotate" class="control-btn">↻</button>
-        <button id="btnDrop" class="control-btn primary">DROP</button>
-        <button id="btnRight" class="control-btn">▶</button>
-    </div>
-    
-    <!-- オーバーレイ -->
-    <div id="overlay" class="overlay active">
-        <div class="overlay-content">
-            <h1 id="overlayTitle">動物タワーバトル</h1>
-            <p id="overlayMessage">15個積み上げてクリアを目指そう！</p>
-            <button id="overlayButton" class="overlay-btn">スタート</button>
-        </div>
-    </div>
+  <!-- 背景の雲 -->
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
 
-    <script>
-        // ゲーム全体の設定
-        const Game = {
-            // Matter.js
-            Engine: Matter.Engine,
-            Render: Matter.Render,
-            World: Matter.World,
-            Bodies: Matter.Bodies,
-            Body: Matter.Body,
-            Events: Matter.Events,
-            
-            // ゲーム設定
-            config: {
-                width: window.innerWidth,
-                height: window.innerHeight,
-                maxPieces: 15,
-                pieceScale: 0.5,
-                gravity: 0.8,
-                platformY: window.innerHeight - 120,
-                platformWidth: 200
-            },
-            
-            // ゲーム状態
-            state: {
-                score: 0,
-                highScore: localStorage.getItem('highScore') || 0,
-                currentPiece: null,
-                pieces: [],
-                isDropping: false,
-                gameOver: false,
-                moveDirection: 0,
-                moveInterval: null
-            },
-            
-            // 画像データ（提供された画像用）
-            pieceImages: [],
-            imageUrls: [],
-            
-            // Matter.jsインスタンス
-            engine: null,
-            render: null,
-            platform: null,
-            
-            // 初期化
-            init: function() {
-                // Matter.jsエンジン設定
-                this.engine = this.Engine.create();
-                this.engine.world.gravity.y = this.config.gravity;
-                
-                // レンダラー設定
-                const canvas = document.getElementById('gameCanvas');
-                this.render = this.Render.create({
-                    canvas: canvas,
-                    engine: this.engine,
-                    options: {
-                        width: this.config.width,
-                        height: this.config.height,
-                        wireframes: false,
-                        background: 'transparent'
-                    }
-                });
-                
-                // 画像URLを設定（15種類）
-                for(let i = 1; i <= 15; i++) {
-                    this.imageUrls.push(`images/piece${String(i).padStart(2, '0')}.png`);
-                }
-                
-                // デフォルト画像を生成（画像ファイルがない場合用）
-                this.generateDefaultImages();
-                
-                // プラットフォーム作成
-                this.createPlatform();
-                
-                // イベント設定
-                this.setupEvents();
-                
-                // UI更新
-                this.updateUI();
-                
-                // 物理エンジン開始
-                this.Render.run(this.render);
-                this.Engine.run(this.engine);
-            },
-            
-            // デフォルト画像生成（画像ファイルがない場合のフォールバック）
-            generateDefaultImages: function() {
-                const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
-                               '#DDA0DD', '#98D8C8', '#F7DC6F', '#85C1E2', '#F8B739',
-                               '#52C234', '#FF6F61', '#6B5B95', '#88B04B', '#EFC050'];
-                
-                for(let i = 0; i < 15; i++) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 100;
-                    canvas.height = 100;
-                    const ctx = canvas.getContext('2d');
-                    
-                    // 動物っぽい形を描画
-                    ctx.fillStyle = colors[i];
-                    ctx.beginPath();
-                    
-                    // 簡単な動物シルエット
-                    if(i % 3 === 0) {
-                        // 丸い動物
-                        ctx.arc(50, 50, 35, 0, Math.PI * 2);
-                        ctx.fill();
-                        // 耳
-                        ctx.beginPath();
-                        ctx.arc(30, 30, 15, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.beginPath();
-                        ctx.arc(70, 30, 15, 0, Math.PI * 2);
-                        ctx.fill();
-                    } else if(i % 3 === 1) {
-                        // 四角い動物
-                        ctx.fillRect(20, 30, 60, 50);
-                        // 頭
-                        ctx.beginPath();
-                        ctx.arc(50, 30, 25, 0, Math.PI * 2);
-                        ctx.fill();
-                    } else {
-                        // 三角の動物
-                        ctx.moveTo(50, 20);
-                        ctx.lineTo(80, 70);
-                        ctx.lineTo(20, 70);
-                        ctx.closePath();
-                        ctx.fill();
-                    }
-                    
-                    this.pieceImages.push(canvas.toDataURL());
-                }
-            },
-            
-            // 画像から物理ボディを作成
-            createPieceFromImage: async function(imageUrl, x, y) {
-                return new Promise((resolve) => {
-                    const img = new Image();
-                    
-                    img.onload = () => {
-                        const scale = this.config.pieceScale;
-                        const body = this.Bodies.rectangle(x, y, 
-                            img.width * scale, 
-                            img.height * scale, {
-                            render: {
-                                sprite: {
-                                    texture: imageUrl,
-                                    xScale: scale,
-                                    yScale: scale
-                                }
-                            },
-                            friction: 0.8,
-                            frictionStatic: 0.8,
-                            restitution: 0.2,
-                            density: 0.001
-                        });
-                        resolve(body);
-                    };
-                    
-                    img.onerror = () => {
-                        // 画像読み込みエラー時はデフォルト画像を使用
-                        const index = Math.floor(Math.random() * this.pieceImages.length);
-                        const body = this.Bodies.rectangle(x, y, 50, 50, {
-                            render: {
-                                sprite: {
-                                    texture: this.pieceImages[index],
-                                    xScale: scale,
-                                    yScale: scale
-                                }
-                            },
-                            friction: 0.8,
-                            frictionStatic: 0.8,
-                            restitution: 0.2,
-                            density: 0.001
-                        });
-                        resolve(body);
-                    };
-                    
-                    img.src = imageUrl;
-                });
-            },
-            
-            // プラットフォーム作成
-            createPlatform: function() {
-                this.platform = this.Bodies.rectangle(
-                    this.config.width / 2,
-                    this.config.platformY,
-                    this.config.platformWidth,
-                    20,
-                    {
-                        isStatic: true,
-                        render: {
-                            fillStyle: '#8B7355'
-                        }
-                    }
-                );
-                
-                // 壁を作成
-                const leftWall = this.Bodies.rectangle(
-                    -25, this.config.height / 2, 50, this.config.height * 2,
-                    { isStatic: true, render: { visible: false } }
-                );
-                
-                const rightWall = this.Bodies.rectangle(
-                    this.config.width + 25, this.config.height / 2, 50, this.config.height * 2,
-                    { isStatic: true, render: { visible: false } }
-                );
-                
-                this.World.add(this.engine.world, [this.platform, leftWall, rightWall]);
-            },
-            
-            // 新しいピースを生成
-            spawnPiece: async function() {
-                if(this.state.isDropping || this.state.gameOver) return;
-                
-                const x = this.config.width / 2;
-                const y = 100;
-                
-                // ランダムに画像を選択
-                const index = Math.floor(Math.random() * this.imageUrls.length);
-                const imageUrl = this.imageUrls[index];
-                
-                // 画像からボディを作成
-                this.state.currentPiece = await this.createPieceFromImage(imageUrl, x, y);
-                this.Body.setStatic(this.state.currentPiece, true);
-                this.World.add(this.engine.world, this.state.currentPiece);
-            },
-            
-            // ピースを移動
-            movePiece: function(direction) {
-                if(!this.state.currentPiece || this.state.isDropping) return;
-                
-                const currentX = this.state.currentPiece.position.x;
-                const newX = Math.max(50, Math.min(this.config.width - 50, currentX + direction * 5));
-                
-                this.Body.setPosition(this.state.currentPiece, {
-                    x: newX,
-                    y: this.state.currentPiece.position.y
-                });
-            },
-            
-            // ピースを回転
-            rotatePiece: function() {
-                if(!this.state.currentPiece || this.state.isDropping) return;
-                this.Body.rotate(this.state.currentPiece, Math.PI / 3);
-            },
-            
-            // ピースをドロップ
-            dropPiece: function() {
-                if(!this.state.currentPiece || this.state.isDropping || this.state.gameOver) return;
-                
-                this.Body.setStatic(this.state.currentPiece, false);
-                this.state.isDropping = true;
-                this.state.pieces.push(this.state.currentPiece);
-                
-                // 落下後の処理
-                setTimeout(() => {
-                    this.checkGameState();
-                    
-                    if(!this.state.gameOver) {
-                        this.state.score++;
-                        this.updateUI();
-                        
-                        if(this.state.score >= this.config.maxPieces) {
-                            this.win();
-                        } else {
-                            this.state.isDropping = false;
-                            this.spawnPiece();
-                        }
-                    }
-                }, 2000);
-            },
-            
-            // ゲーム状態チェック
-            checkGameState: function() {
-                const threshold = this.config.height - 50;
-                
-                for(let piece of this.state.pieces) {
-                    if(piece.position.y > threshold) {
-                        // 台座の範囲外かチェック
-                        const platformLeft = this.platform.position.x - this.config.platformWidth / 2;
-                        const platformRight = this.platform.position.x + this.config.platformWidth / 2;
-                        
-                        if(piece.position.x < platformLeft - 20 || piece.position.x > platformRight + 20) {
-                            this.gameOver();
-                            return;
-                        }
-                    }
-                }
-            },
-            
-            // 勝利処理
-            win: function() {
-                this.state.gameOver = true;
-                const overlay = document.getElementById('overlay');
-                overlay.className = 'overlay active win';
-                document.getElementById('overlayTitle').textContent = 'クリア！';
-                document.getElementById('overlayMessage').textContent = `見事${this.config.maxPieces}個積み上げました！`;
-                document.getElementById('overlayButton').textContent = 'もう一度';
-                
-                // ハイスコア更新
-                if(this.state.score > this.state.highScore) {
-                    this.state.highScore = this.state.score;
-                    localStorage.setItem('highScore', this.state.highScore);
-                    this.updateUI();
-                }
-            },
-            
-            // ゲームオーバー処理
-            gameOver: function() {
-                this.state.gameOver = true;
-                const overlay = document.getElementById('overlay');
-                overlay.className = 'overlay active lose';
-                document.getElementById('overlayTitle').textContent = 'ゲームオーバー';
-                document.getElementById('overlayMessage').textContent = `${this.state.score}個で崩れてしまいました`;
-                document.getElementById('overlayButton').textContent = 'リトライ';
-            },
-            
-            // リセット
-            reset: function() {
-                // ワールドをクリア
-                this.World.clear(this.engine.world);
-                this.Engine.clear(this.engine);
-                
-                // 状態リセット
-                this.state.score = 0;
-                this.state.currentPiece = null;
-                this.state.pieces = [];
-                this.state.isDropping = false;
-                this.state.gameOver = false;
-                
-                // UI更新
-                this.updateUI();
-                
-                // プラットフォーム再作成
-                this.createPlatform();
-                
-                // 新しいピース生成
-                this.spawnPiece();
-            },
-            
-            // UI更新
-            updateUI: function() {
-                document.getElementById('score').textContent = this.state.score;
-                document.getElementById('highScore').textContent = this.state.highScore;
-            },
-            
-            // イベント設定
-            setupEvents: function() {
-                // オーバーレイボタン
-                document.getElementById('overlayButton').addEventListener('click', () => {
-                    document.getElementById('overlay').classList.remove('active');
-                    if(this.state.gameOver) {
-                        this.reset();
-                    } else {
-                        this.spawnPiece();
-                    }
-                });
-                
-                // 移動ボタン
-                const setupMoveButton = (btn, direction) => {
-                    const startMove = () => {
-                        this.state.moveDirection = direction;
-                        this.movePiece(direction);
-                        
-                        this.state.moveInterval = setInterval(() => {
-                            this.movePiece(direction);
-                        }, 50);
-                    };
-                    
-                    const stopMove = () => {
-                        if(this.state.moveInterval) {
-                            clearInterval(this.state.moveInterval);
-                            this.state.moveInterval = null;
-                        }
-                    };
-                    
-                    btn.addEventListener('mousedown', startMove);
-                    btn.addEventListener('touchstart', e => {
-                        e.preventDefault();
-                        startMove();
-                    });
-                    
-                    btn.addEventListener('mouseup', stopMove);
-                    btn.addEventListener('mouseleave', stopMove);
-                    btn.addEventListener('touchend', stopMove);
-                    btn.addEventListener('touchcancel', stopMove);
-                };
-                
-                setupMoveButton(document.getElementById('btnLeft'), -1);
-                setupMoveButton(document.getElementById('btnRight'), 1);
-                
-                // 回転ボタン
-                document.getElementById('btnRotate').addEventListener('click', () => {
-                    this.rotatePiece();
-                });
-                
-                // ドロップボタン
-                document.getElementById('btnDrop').addEventListener('click', () => {
-                    this.dropPiece();
-                });
-                
-                // キーボード操作
-                document.addEventListener('keydown', (e) => {
-                    switch(e.key) {
-                        case 'ArrowLeft':
-                            this.movePiece(-1);
-                            break;
-                        case 'ArrowRight':
-                            this.movePiece(1);
-                            break;
-                        case ' ':
-                            e.preventDefault();
-                            this.dropPiece();
-                            break;
-                        case 'r':
-                        case 'R':
-                            this.rotatePiece();
-                            break;
-                    }
-                });
-                
-                // リサイズ対応
-                window.addEventListener('resize', () => {
-                    this.config.width = window.innerWidth;
-                    this.config.height = window.innerHeight;
-                    this.config.platformY = window.innerHeight - 120;
-                    
-                    this.render.options.width = this.config.width;
-                    this.render.options.height = this.config.height;
-                    this.render.canvas.width = this.config.width;
-                    this.render.canvas.height = this.config.height;
-                });
-            }
-        };
-        
-        // ゲーム開始
-        window.addEventListener('DOMContentLoaded', () => {
-            Game.init();
+  <!-- ステータス -->
+  <div id="status">
+    <div class="si"><span>スコア</span><span id="score" class="v">0</span></div>
+    <div class="si"><span>ハイスコア</span><span id="hiscore" class="v">0</span></div>
+  </div>
+
+  <!-- 操作ボタン -->
+  <div id="ctrl">
+    <button id="left"  class="btn" aria-label="左に動かす">◀</button>
+    <button id="rot"   class="btn" aria-label="60度回転">↻</button>
+    <button id="drop"  class="btn drop" aria-label="ドロップ">DROP</button>
+    <button id="right" class="btn" aria-label="右に動かす">▶</button>
+  </div>
+
+  <!-- ゲーム -->
+  <canvas id="game"></canvas>
+
+  <!-- オーバーレイ（開始/勝敗） -->
+  <div id="ov" class="ov show">
+    <div class="card" id="ovCard">
+      <h1 id="ovTitle">こはなタワー</h1>
+      <p id="ovMsg">土台の上に15個積めたらクリア！場外に落ちたらゲームオーバー。</p>
+      <button id="ovBtn" class="big">スタート</button>
+    </div>
+  </div>
+
+<script>
+(()=>{
+  const {Engine,Render,Runner,World,Bodies,Body,Composite,Events,Bounds,Vector} = Matter;
+
+  /* ---------- 基本設定 ---------- */
+  const cfg = {
+    w: window.innerWidth,
+    h: window.innerHeight,
+    gravity: 0.9,
+    maxPieces: 15,
+    pieceScale: 0.55,            // 画像の表示スケール
+    baseYRatio: 0.75,            // 画面下から1/4の高さに土台
+    fallKillMargin: 80           // 画面外に落ちたと判定する余白
+  };
+
+  /* ---------- 状態 ---------- */
+  const state = {
+    score: 0,
+    hiscore: Number(localStorage.getItem('kohana.hiscore')||0),
+    current: null,
+    dropping: false,
+    over: false,
+    pieces: [],
+    moveTimer: null
+  };
+
+  /* ---------- 画像ファイル候補（piece と peice の両綴りをサポート） ---------- */
+  const imgList = [];
+  for(let i=1;i<=15;i++){
+    const nn = String(i).padStart(2,'0');
+    imgList.push(`images/piece${nn}.png`);
+    imgList.push(`images/peice${nn}.png`);
+  }
+
+  /* ---------- Matter.js 初期化 ---------- */
+  const canvas = document.getElementById('game');
+  const engine = Engine.create();
+  engine.world.gravity.y = cfg.gravity;
+
+  const render = Render.create({
+    canvas,
+    engine,
+    options:{
+      width: cfg.w,
+      height: cfg.h,
+      background:'transparent',
+      wireframes:false,
+      pixelRatio: Math.min(window.devicePixelRatio||1, 2)
+    }
+  });
+  Render.run(render);
+  const runner = Runner.create();
+  Runner.run(runner, engine);
+
+  /* ---------- 土台と壁 ---------- */
+  const baseW = Math.round(cfg.w*0.66);
+  const baseH = 22;
+  const baseY = Math.round(cfg.h*cfg.baseYRatio);
+
+  const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {
+    isStatic:true,
+    render:{ fillStyle:'#8B7355' }
+  });
+
+  const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
+  const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}});
+  World.add(engine.world,[base,wallL,wallR]);
+
+  /* ---------- UI ---------- */
+  const $ = sel=>document.querySelector(sel);
+  const ov = $('#ov'), ovCard = $('#ovCard'), ovTitle = $('#ovTitle'), ovMsg = $('#ovMsg'), ovBtn = $('#ovBtn');
+  const scoreEl = $('#score'), hisEl = $('#hiscore');
+  hisEl.textContent = state.hiscore;
+
+  const updateScore = ()=>{
+    scoreEl.textContent = state.score;
+    if(state.score>state.hiscore){
+      state.hiscore = state.score;
+      localStorage.setItem('kohana.hiscore', String(state.hiscore));
+      hisEl.textContent = state.hiscore;
+    }
+  };
+
+  /* ---------- 画像 → 外形（凸）生成（簡易版） ---------- */
+  function loadImageWithFallback(list, idx=0){
+    return new Promise((resolve,reject)=>{
+      if(idx>=list.length) return reject(new Error('not found'));
+      const img = new Image();
+      img.onload = ()=>resolve(img);
+      img.onerror = ()=>resolve(loadImageWithFallback(list, idx+1)); // 次候補へ
+      img.src = list[idx];
+    });
+  }
+
+  function getConvexHull(points){
+    // Monotone chain
+    points.sort((a,b)=> a.x===b.x ? a.y-b.y : a.x-b.x);
+    const cross = (o,a,b)=>(a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
+    const lower=[];
+    for(const p of points){
+      while(lower.length>=2 && cross(lower[lower.length-2], lower[lower.length-1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper=[];
+    for(let i=points.length-1;i>=0;i--){
+      const p = points[i];
+      while(upper.length>=2 && cross(upper[upper.length-2], upper[upper.length-1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    upper.pop(); lower.pop();
+    return lower.concat(upper);
+  }
+
+  async function createPieceBody(x,y){
+    const scale = cfg.pieceScale;
+
+    // 1) 画像ロード（pieceXX → peiceXX の順で探索）
+    let img=null;
+    try{
+      // ランダムで1~15のセットを選び、その2候補（piece / peice）を与える
+      const i = Math.floor(Math.random()*15); // 0-14
+      const pair = [imgList[i*2], imgList[i*2+1]];
+      img = await loadImageWithFallback(pair);
+    }catch(e){
+      img = null;
+    }
+
+    // 2) 画像から凸包を生成（失敗したらカラフルな丸/四角のフォールバック）
+    if(img){
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const cvs = document.createElement('canvas');
+      cvs.width = w; cvs.height = h;
+      const ctx = cvs.getContext('2d');
+      ctx.drawImage(img,0,0);
+      const id = ctx.getImageData(0,0,w,h).data;
+
+      // ざっくりサンプリングして不透明ピクセルを収集
+      const step = Math.max(2, Math.floor(Math.min(w,h)/48));
+      const pts=[];
+      const alphaThr = 16;
+      for(let yy=0; yy<h; yy+=step){
+        for(let xx=0; xx<w; xx+=step){
+          const a = id[(yy*w+xx)*4+3];
+          if(a>alphaThr) pts.push({x:xx, y:yy});
+        }
+      }
+
+      if(pts.length>=3){
+        // 凸包 → スケールしてボディ化
+        const hull = getConvexHull(pts).map(p=>({x: x + (p.x - w/2)*scale, y: y + (p.y - h/2)*scale}));
+        // fromVertices はワールド座標を受け取れる
+        const body = Bodies.fromVertices(x, y, hull, {
+          render:{
+            sprite:{ texture: img.src, xScale: scale, yScale: scale }
+          },
+          friction: .35, frictionStatic: .65, restitution: .06, density: .002
+        }, true);
+        return body || Bodies.rectangle(x,y, w*scale, h*scale, {
+          render:{ sprite:{texture: img.src, xScale: scale, yScale: scale}},
+          friction:.35, frictionStatic:.65, restitution:.06, density:.002
         });
-    </script>
+      }else{
+        // 画像はあるが輪郭取れない時は矩形
+        return Bodies.rectangle(x,y, w*scale, h*scale, {
+          render:{ sprite:{texture: img.src, xScale: scale, yScale: scale}},
+          friction:.35, frictionStatic:.65, restitution:.06, density:.002
+        });
+      }
+    }else{
+      // フォールバック：カラフル形状（ここでは scale を必ず定義済み）
+      const size = 88*scale;
+      return Bodies.polygon(x,y, (3+Math.floor(Math.random()*3)), size, {
+        render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') },
+        friction:.5, frictionStatic:.7, restitution:.05, density:.002
+      });
+    }
+  }
+
+  /* ---------- ピース生成/操作 ---------- */
+  async function spawnPiece(){
+    if(state.dropping || state.over) return;
+    const x = cfg.w/2, y = 120;
+    state.current = await createPieceBody(x,y);
+    Body.setStatic(state.current, true);     // 落とすまでは静的
+    World.add(engine.world, state.current);
+  }
+
+  function movePiece(dx){
+    if(!state.current || state.dropping) return;
+    const nx = Math.max(30, Math.min(cfg.w-30, state.current.position.x + dx));
+    Body.setPosition(state.current, {x:nx, y:state.current.position.y});
+  }
+
+  function rotatePiece(){
+    if(!state.current || state.dropping) return;
+    Body.rotate(state.current, Math.PI/3); // 60°
+  }
+
+  function dropPiece(){
+    if(!state.current || state.dropping || state.over) return;
+    Body.setStatic(state.current, false);
+    state.dropping = true;
+    state.pieces.push(state.current);
+
+    // 次のピース準備（簡易：少し時間を置いてから）
+    setTimeout(async ()=>{
+      if(state.over) return;
+      state.score++;
+      updateScore();
+      if(state.score >= cfg.maxPieces){
+        win();
+      }else{
+        state.dropping = false;
+        state.current = null;
+        spawnPiece();
+      }
+    }, 900);
+  }
+
+  /* ---------- 落下監視（毎フレーム） ---------- */
+  function checkFalls(){
+    if(state.over) return;
+    const thresholdY = cfg.h + cfg.fallKillMargin;
+    const left = base.position.x - baseW/2;
+    const right = base.position.x + baseW/2;
+
+    for(const b of state.pieces){
+      // 画面外の落下
+      if(b.position.y > thresholdY){
+        lose(`${state.score}個で落下…`);
+        return;
+      }
+      // 土台より明確に下に落ちた＆土台の外側なら負け
+      if(b.position.y > base.position.y + 28 && (b.position.x < left || b.position.x > right)){
+        lose(`${state.score}個で土台から落下…`);
+        return;
+      }
+    }
+  }
+  Events.on(engine, 'afterUpdate', checkFalls);
+
+  /* ---------- カメラ（縦方向の簡易追尾） ---------- */
+  function updateCamera(){
+    // 一番上のピースのY（小さいほど上）
+    let minY = base.position.y;
+    for(const b of state.pieces){
+      if(b.position.y < minY) minY = b.position.y;
+    }
+    // 上に高く積まれたら少し上にパン
+    const marginTop = 100;
+    const desiredMinY = Math.min(0, minY - marginTop);
+    const currentMinY = render.bounds.min.y;
+    const dy = (desiredMinY - currentMinY) * 0.1; // イージング
+    if(Math.abs(dy) > 0.5){
+      const min = {x:0, y: currentMinY + dy};
+      const max = {x:cfg.w, y: min.y + cfg.h};
+      render.bounds.min = min; render.bounds.max = max;
+      const scaleX = canvas.width / cfg.w;
+      const scaleY = canvas.height / cfg.h;
+      const context = render.context;
+      context.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    }
+    requestAnimationFrame(updateCamera);
+  }
+  requestAnimationFrame(updateCamera);
+
+  /* ---------- 勝敗 ---------- */
+  function win(){
+    state.over = true;
+    ov.classList.add('show');
+    ovCard.classList.add('win');
+    ovTitle.textContent = 'クリア！';
+    ovMsg.textContent = `見事 ${cfg.maxPieces} 個積み上げました！`;
+    ovBtn.textContent = 'もう一度';
+    updateScore();
+  }
+
+  function lose(msg){
+    state.over = true;
+    ov.classList.add('show');
+    ovCard.classList.add('lose');
+    ovTitle.textContent = 'ゲームオーバー';
+    ovMsg.textContent = msg || `${state.score}個で崩れてしまいました`;
+    ovBtn.textContent = 'リトライ';
+  }
+
+  function reset(){
+    // 世界を初期化
+    World.clear(engine.world, false);
+    Engine.clear(engine);
+    // 重力/ランナーは維持、ベースと壁を戻す
+    engine.world.gravity.y = cfg.gravity;
+    World.add(engine.world,[base,wallL,wallR]);
+
+    // 状態リセット
+    state.score = 0; state.current = null; state.dropping=false; state.over=false; state.pieces.length=0;
+    render.bounds.min = {x:0,y:0}; render.bounds.max = {x:cfg.w,y:cfg.h};
+    updateScore();
+    spawnPiece();
+  }
+
+  /* ---------- 入力 ---------- */
+  const press = (el, fnDown, fnUp)=>{
+    let t=null;
+    const start=(e)=>{e.preventDefault(); if(t)clearInterval(t); fnDown(); t=setInterval(fnDown, 50)};
+    const stop =()=>{ if(t){clearInterval(t); t=null} };
+    el.addEventListener('mousedown', start); el.addEventListener('touchstart', start, {passive:false});
+    el.addEventListener('mouseup', stop); el.addEventListener('mouseleave', stop);
+    el.addEventListener('touchend', stop); el.addEventListener('touchcancel', stop);
+  };
+  press(document.getElementById('left'), ()=>movePiece(-6));
+  press(document.getElementById('right'),()=>movePiece( 6));
+  document.getElementById('rot').addEventListener('click', rotatePiece);
+  document.getElementById('drop').addEventListener('click', dropPiece);
+
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='ArrowLeft') movePiece(-6);
+    if(e.key==='ArrowRight') movePiece(6);
+    if(e.key===' '){ e.preventDefault(); dropPiece(); }
+    if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E') rotatePiece();
+    if(e.key==='r'||e.key==='R') if(state.over) reset();
+  });
+
+  window.addEventListener('resize', ()=>{
+    cfg.w = window.innerWidth; cfg.h = window.innerHeight;
+    render.options.width = cfg.w; render.options.height = cfg.h;
+    render.canvas.width = cfg.w; render.canvas.height = cfg.h;
+  });
+
+  /* ---------- オーバーレイ ---------- */
+  ovBtn.addEventListener('click', ()=>{
+    ov.classList.remove('show');
+    if(state.over) reset(); else spawnPiece();
+  });
+
+  // 起動
+  updateScore();
+})();
+</script>
 </body>
 </html>
+
