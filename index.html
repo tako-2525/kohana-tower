@@ -8,6 +8,7 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none}
   html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
   body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
+  /* 雲 */
   .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08))}
   .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
   .c1{width:120px;height:44px;top:14%;animation:flow 22s linear infinite}
@@ -16,19 +17,24 @@
   .c2::before{width:68px;height:42px;right:18px;top:-20px}
   @keyframes flow{0%{left:-140px}100%{left:110%}}
 
+  /* Canvas */
   #game{position:fixed;inset:0;display:block;width:100%;height:100%}
 
+  /* ステータス */
   #status{position:fixed;top:10px;left:50%;transform:translateX(-50%);
     background:rgba(255,255,255,.95);border-radius:22px;padding:8px 14px;display:flex;gap:14px;align-items:center;z-index:10}
   .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333}
   .si .v{font-size:18px;color:#FF6B6B}
 
+  /* 操作ボタン */
   #ctrl{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:14px;z-index:10}
   .btn{width:62px;height:62px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
     display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(0,0,0,.12);cursor:pointer;touch-action:manipulation}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
   .btn:active{transform:scale(.96)}
   .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:14px}
 
+  /* オーバーレイ */
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.66);display:none;align-items:center;justify-content:center;z-index:20}
   .ov.show{display:flex}
   .card{background:#fff;border-radius:28px;padding:32px 24px;max-width:min(480px,90%);text-align:center;box-shadow:0 18px 36px rgba(0,0,0,.28)}
@@ -38,30 +44,36 @@
   .card.win h1{color:#4ECDC4}
   .card.lose h1{color:#95A5A6}
 </style>
-<!-- Matter.js -->
+<!-- 物理エンジン -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-<!-- poly-decomp（fromVertices の凸分解に必須） -->
+<!-- 凸分解（Bodies.fromVertices用） -->
 <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
-<script>window.decomp = decomp;</script>
+<script>window.decomp = decomp; if(Matter && Matter.Common && Matter.Common.setDecomp){ Matter.Common.setDecomp(decomp); }</script>
 </head>
 <body>
-  <div class="cloud c1"></div><div class="cloud c2"></div>
+  <!-- 背景の雲 -->
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
 
+  <!-- ステータス -->
   <div id="status">
     <div class="si"><span>スコア</span><span id="score" class="v">0</span></div>
     <div class="si"><span>ハイスコア</span><span id="hiscore" class="v">0</span></div>
     <div class="si"><span>画像</span><span id="imgcnt" class="v">0</span></div>
   </div>
 
+  <!-- 操作ボタン -->
   <div id="ctrl">
-    <button id="left"  class="btn" aria-label="左に動かす">◀</button>
-    <button id="rot"   class="btn" aria-label="60度回転">↻</button>
-    <button id="drop"  class="btn drop" aria-label="ドロップ">DROP</button>
-    <button id="right" class="btn" aria-label="右に動かす">▶</button>
+    <button id="left"  class="btn" aria-label="左に動かす" disabled>◀</button>
+    <button id="rot"   class="btn" aria-label="60度回転" disabled>↻</button>
+    <button id="drop"  class="btn drop" aria-label="ドロップ" disabled>DROP</button>
+    <button id="right" class="btn" aria-label="右に動かす" disabled>▶</button>
   </div>
 
+  <!-- ゲーム -->
   <canvas id="game"></canvas>
 
+  <!-- オーバーレイ（開始/勝敗） -->
   <div id="ov" class="ov show">
     <div class="card" id="ovCard">
       <h1 id="ovTitle">こはなタワー</h1>
@@ -72,14 +84,14 @@
 
 <script>
 (()=>{
-  const {Engine,Render,Runner,World,Bodies,Body,Events,Composite} = Matter;
+  const {Engine,Render,Runner,World,Bodies,Body,Events,Composite,Vertices} = Matter;
 
   /* ===== 設定 ===== */
   const cfg = {
     w: innerWidth, h: innerHeight,
     gravity: 1.0,
     maxPieces: 15,
-    targetEdge: 120,      // 画像長辺の目標ピクセル
+    targetEdge: 120,   // 画像長辺をこのサイズに
     baseYRatio: 0.75,
     fallKillMargin: 80
   };
@@ -90,12 +102,12 @@
     phase: PHASE.READY,
     score: 0,
     hiscore: Number(localStorage.getItem('kohana.hiscore')||0),
-    current: null,             // 今操作中の1個だけ
+    current: null,          // これがある間は絶対に新規生成しない
     pieces: [],
     images: [],
     imagesReady: false,
     stableFrames: 0,
-    spawnLock: false           // ★非同期2重生成ブロック
+    spawnBusy: false        // ★非同期生成ロック（多重スポーン防止）
   };
 
   /* ===== UI ===== */
@@ -117,21 +129,21 @@
     [btnLeft,btnRight,btnRot,btnDrop].forEach(b=>{ b.disabled=!en; b.style.opacity=en?1:0.4; });
   }
 
-  /* ===== 画像検出（名前ゆれ吸収） ===== */
+  /* ===== 画像検出（名前ゆれ対応） ===== */
   function candidatesFor(i){
     const nn = String(i).padStart(2,'0');
     const bases = [
       `piece${nn}.png`,`piece_${nn}.png`,`peice${nn}.png`,`piece${i}.png`
     ];
     const exts=['png','PNG'];
-    const doubles = bases.flatMap(n=>[`${n}.png`,`${n}.PNG`]); // .png.png など
+    const doubles = bases.flatMap(n=>[`${n}.png`,`${n}.PNG`]);
     const all = [
       ...bases.flatMap(n=>exts.map(e=>`${n.replace(/\.png$/,'')}.${e}`)),
       ...doubles
     ];
     return all.map(n=>`images/${n}`);
   }
-  const testImage = url => new Promise(res=>{ const im=new Image(); im.onload=()=>res(url); im.onerror=()=>res(null); im.src=url; });
+  const testImage = url => new Promise(res=>{ const img=new Image(); img.onload=()=>res(url); img.onerror=()=>res(null); img.src=url; });
   async function findAllImages(){
     const found=[];
     for(let i=1;i<=cfg.maxPieces;i++){
@@ -149,11 +161,6 @@
   const canvas = document.getElementById('game');
   const engine = Engine.create();
   engine.world.gravity.y = cfg.gravity;
-  engine.enableSleeping = true;               // ★安定化
-  engine.positionIterations = 8;
-  engine.velocityIterations = 6;
-  engine.constraintIterations = 2;
-
   const render = Render.create({
     canvas, engine,
     options:{ width:cfg.w, height:cfg.h, background:'transparent', wireframes:false,
@@ -162,7 +169,6 @@
   Render.run(render);
   Runner.run(Runner.create(), engine);
 
-  // 土台と壁
   const baseW = Math.round(cfg.w*0.66), baseH=22, baseY = Math.round(cfg.h*cfg.baseYRatio);
   const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {isStatic:true, render:{fillStyle:'#8B7355'}, label:'base'});
   const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
@@ -200,6 +206,16 @@
     const L=simplifyRDP(pts.slice(0,idx+1),eps), R=simplifyRDP(pts.slice(idx),eps);
     return L.slice(0,-1).concat(R);
   }
+  function ccwAndDedup(pts){
+    // 重複点除去＋CCW化
+    const p2 = [];
+    for(const [x,y] of pts){ const last=p2[p2.length-1]; if(!last || last[0]!==x || last[1]!==y) p2.push([x,y]); }
+    if(p2.length<3) return p2;
+    let area=0; for(let i=0;i<p2.length;i++){ const [x1,y1]=p2[i], [x2,y2]=p2[(i+1)%p2.length]; area += (x1*y2 - x2*y1); }
+    if(area<0) p2.reverse();
+    return p2;
+  }
+
   async function bodyFromImageURL(url, x, y){
     const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
     const id = getImageData(img); const w=id.width, h=id.height, data=id.data;
@@ -215,11 +231,12 @@
       const s = cfg.targetEdge / Math.max(w,h);
       return Bodies.rectangle(x,y, w*s, h*s, {
         render:{ sprite:{texture:url, xScale:s, yScale:s}},
-        friction:0.5, frictionStatic:0.8, restitution:0.03, density:0.003, label:'piece',
-        sleepThreshold: 60
+        friction:.45, frictionStatic:.7, restitution:.03, density:.0025, label:'piece'
       });
     }
     contour = simplifyRDP(contour, Math.max(2, Math.min(w,h)/80));
+    contour = ccwAndDedup(contour);
+
     const minx=Math.min(...contour.map(p=>p[0])), maxx=Math.max(...contour.map(p=>p[0]));
     const miny=Math.min(...contour.map(p=>p[1])), maxy=Math.max(...contour.map(p=>p[1]));
     const s = cfg.targetEdge / Math.max(maxx-minx, maxy-miny || 1);
@@ -228,21 +245,17 @@
 
     const body = Bodies.fromVertices(x, y, [verts], {
       render:{ sprite:{texture:url, xScale:s, yScale:s}},
-      friction:0.5, frictionStatic:0.85, restitution:0.03, density:0.003, label:'piece',
-      sleepThreshold: 60
+      friction:.45, frictionStatic:.75, restitution:.03, density:.0025, label:'piece'
     }, true);
-    return body || Bodies.rectangle(x,y,(maxx-minx)*s,(maxy-miny)*s,{
-      render:{ sprite:{texture:url, xScale:s, yScale:s}},
-      friction:0.5, frictionStatic:0.85, restitution:0.03, density:0.003, label:'piece',
-      sleepThreshold: 60
-    });
+    return body || Bodies.rectangle(x,y,(maxx-minx)*s,(maxy-miny)*s,{ render:{ sprite:{texture:url, xScale:s, yScale:s}}, friction:.45, frictionStatic:.75, restitution:.03, density:.0025, label:'piece' });
   }
 
-  /* ===== スポーン（AIM中のみ・1個だけ・非同期ガード） ===== */
+  /* ===== スポーン（AIM中のみ・厳密に1個） ===== */
   async function spawnPiece(){
     if(state.phase!==PHASE.AIM) return;
-    if(state.current || state.spawnLock) return;    // ★二重ブロック
-    state.spawnLock = true;
+    if(state.current) return;          // 既に1個ある
+    if(state.spawnBusy) return;        // 生成中（非同期）なら戻る
+    state.spawnBusy = true;
 
     const topY = state.pieces.length ? Math.min(...state.pieces.map(b => b.position.y)) : base.position.y;
     const y = Math.min(120, topY - 160);
@@ -250,28 +263,22 @@
 
     let body=null;
     try{
-      if(state.images.length){
-        const url = rand(state.images);
-        body = await bodyFromImageURL(url, x, y);
-      }else{
-        const size = cfg.targetEdge;
-        body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, {
-          render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') },
-          friction:0.5, frictionStatic:0.85, restitution:0.03, density:0.003, label:'piece',
-          sleepThreshold: 60
-        });
-      }
-
-      // フェーズが変わっていたら捨てる
-      if(state.phase!==PHASE.AIM){ if(body) World.remove(engine.world, body); return; }
-
-      Body.setStatic(body, true);
-      body.label = 'currentPiece';             // 現在ピース識別
-      World.add(engine.world, body);
-      state.current = body;
-    } finally {
-      state.spawnLock = false;
+      const url = state.images.length ? rand(state.images) : null;
+      if(url) body = await bodyFromImageURL(url, x, y);
+    }catch(e){ body=null; }
+    if(!body){
+      // 画像失敗時フォールバック
+      const size = cfg.targetEdge;
+      body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, {
+        render:{ fillStyle:'#'+Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0') },
+        friction:.5, frictionStatic:.75, restitution:.03, density:.0025, label:'piece'
+      });
     }
+    Body.setStatic(body, true);
+    body.label = 'currentPiece';
+    World.add(engine.world, body);
+    state.current = body;
+    state.spawnBusy = false;
   }
 
   /* ===== 操作 ===== */
@@ -287,35 +294,34 @@
   function dropPiece(){
     if(state.phase!==PHASE.AIM || !state.current) return;
     Body.setStatic(state.current, false);
-    state.current.label = 'piece';
+    state.current.label='piece';
     state.pieces.push(state.current);
     state.current = null;
     state.phase = PHASE.DROP;
-    setButtonsEnabled(false);
     state.stableFrames = 0;
+    setButtonsEnabled(false);
   }
 
-  /* ===== 余分掃除（保険） ===== */
+  /* ===== afterUpdate：落下/安定 & 余分掃除（保険） ===== */
+  const STABLE_NEED = 55;  // ≈0.9s
+  const VEL_THR = 0.15;
+  const ANG_THR = 0.02;
+
   function cleanupExtraCurrents(){
     if(state.phase!==PHASE.AIM) return;
     const currents = Composite.allBodies(engine.world).filter(b=>b.label==='currentPiece');
     if(currents.length>1){
+      // 先頭以外は削除（念のため）
       for(let i=1;i<currents.length;i++){ World.remove(engine.world, currents[i]); }
     }
-    if(!state.current || state.current.label!=='currentPiece'){
-      state.current = currents[0] || state.current || null;
-    }
+    if(!state.current || state.current.label!=='currentPiece'){ state.current = currents[0] || null; }
   }
-
-  /* ===== 毎フレーム：落下/安定判定 & 次ターン ===== */
-  const STABLE_NEED = 55; // ≈0.9s
-  const VEL_THR = 0.15;
-  const ANG_THR = 0.018;
 
   Events.on(engine,'afterUpdate', ()=>{
     if(state.phase===PHASE.OVER) return;
 
-    cleanupExtraCurrents(); // ★二重生成の最終保険
+    // 余分な現在ピースがあれば除去（保険）
+    cleanupExtraCurrents();
 
     // 落下チェック
     const thresholdY = cfg.h + cfg.fallKillMargin;
@@ -343,7 +349,7 @@
         if(state.score >= cfg.maxPieces){ return win(); }
         state.phase = PHASE.AIM;
         setButtonsEnabled(true);
-        spawnPiece(); // 次の“1個だけ”
+        spawnPiece(); // 次の1個だけ
       }
     }
   });
@@ -376,10 +382,8 @@
   }
   function reset(){
     World.clear(engine.world, false); Engine.clear(engine);
-    engine.world.gravity.y = cfg.gravity; engine.enableSleeping = true;
-    engine.positionIterations = 8; engine.velocityIterations = 6; engine.constraintIterations = 2;
-    World.add(engine.world,[base,wallL,wallR]);
-    state.score=0; state.pieces.length=0; state.current=null; state.stableFrames=0; state.spawnLock=false;
+    engine.world.gravity.y = cfg.gravity; World.add(engine.world,[base,wallL,wallR]);
+    state.score=0; state.pieces.length=0; state.current=null; state.stableFrames=0; state.spawnBusy=false;
     state.phase=PHASE.AIM; setButtonsEnabled(true);
     render.bounds.min={x:0,y:0}; render.bounds.max={x:cfg.w,y:cfg.h};
     updateScore(); spawnPiece();
@@ -388,4 +392,41 @@
   /* ===== 入力 ===== */
   const press=(el,down)=>{
     let t=null;
-    const start=e=>{e.preventDefault
+    const start=e=>{e.preventDefault(); if(t)clearInterval(t); down(); t=setInterval(down,50)};
+    const stop =()=>{if(t){clearInterval(t);t=null}};
+    el.addEventListener('mousedown',start); el.addEventListener('touchstart',start,{passive:false});
+    el.addEventListener('mouseup',stop); el.addEventListener('mouseleave',stop);
+    el.addEventListener('touchend',stop); el.addEventListener('touchcancel',stop);
+  };
+  press(btnLeft, ()=>movePiece(-6));
+  press(btnRight,()=>movePiece( 6));
+  btnRot.addEventListener('click', rotatePiece);
+  btnDrop.addEventListener('click', dropPiece);
+
+  document.addEventListener('keydown', e=>{
+    if(e.key==='ArrowLeft') movePiece(-6);
+    if(e.key==='ArrowRight') movePiece(6);
+    if(e.key===' '){ e.preventDefault(); dropPiece(); }
+    if(['q','Q','e','E'].includes(e.key)) rotatePiece();
+    if(e.key==='r'||e.key==='R'){ if(state.phase===PHASE.OVER) reset(); }
+  });
+
+  window.addEventListener('resize', ()=>{
+    render.canvas.width = (cfg.w=innerWidth);
+    render.canvas.height= (cfg.h=innerHeight);
+  });
+
+  /* ===== 起動 ===== */
+  ovBtn.addEventListener('click', async ()=>{
+    if(state.phase!==PHASE.READY && state.phase!==PHASE.OVER) return;
+    ov.classList.remove('show');
+    if(!state.imagesReady) await findAllImages();
+    if(state.phase===PHASE.OVER){ reset(); return; }
+    state.phase=PHASE.AIM; setButtonsEnabled(true); spawnPiece();
+  });
+
+  updateScore();
+})();
+</script>
+</body>
+</html>
