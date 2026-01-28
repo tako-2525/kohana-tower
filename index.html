@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>こはなタワー - 卒業式ver</title>
 <style>
-  /* 基本設定：スマホの誤動作防止 */
+  /* 基本設定：スマホの誤動作防止を強化 */
   *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none;touch-action:none}
   html,body{width:100%;height:100%;overflow:hidden;font-family:"Sawarabi Mincho",serif;background:#87CEEB}
   
-  /* 背景：青空と雲のアニメーション */
+  /* 背景：青空と雲のアニメーション（維持） */
   body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
   .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08));z-index:0}
   .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
@@ -26,14 +26,13 @@
   .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333;font-size:14px}
   .si .v{font-size:18px;color:#d4af37}
 
-  /* 操作ボタン：スマホで押しやすいサイズに強化 */
+  /* 操作ボタン：スマホで押しやすいサイズ */
   #ctrl{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);display:flex;gap:10px;z-index:10}
   .btn{width:65px;height:65px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
     display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(0,0,0,.15);cursor:pointer}
   .btn.drop{width:80px;height:80px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:16px}
   .btn:active{transform:scale(0.92);background:#eee}
 
-  /* 報酬画像を含むオーバーレイ */
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(5px)}
   .ov.show{display:flex}
   .card{background:#fff;border:2px solid #d4af37;border-radius:28px;padding:30px 20px;width:85%;max-width:350px;text-align:center;box-shadow:0 18px 36px rgba(0,0,0,0.3)}
@@ -80,9 +79,9 @@
   const cfg = {
     w: innerWidth, h: innerHeight,
     maxPieces: 20, 
-    baseYRatio: 0.7, // 台座の位置を少し上げて操作しやすくしました
-    targetEdge: 110, // オブジェクトサイズをバランス良く調整
-    rewardImage: 'images/clear_reward.png' // ★ここを報酬画像のパスに変更してください
+    baseYRatio: 0.7, 
+    targetEdge: 110, 
+    rewardImage: 'images/clear_reward.png' // ここで指定した画像が表示されます
   };
 
   const state = {
@@ -118,9 +117,10 @@
     }
   };
 
+  // 反映済み：17番までのピースを読み込む
   async function prepareImages() {
     const found = [];
-    for(let i=1; i<=15; i++){
+    for(let i=1; i<=17; i++){ // 17まで探すように修正
       const url = `images/piece${String(i).padStart(2,'0')}.png`;
       const ok = await new Promise(res => {
         const img = new Image();
@@ -144,7 +144,7 @@
     return state.imagePool.pop();
   }
 
-  // 画像から精密な当たり判定を生成
+  // 反映済み：画像ぴっちりの精密な当たり判定を生成
   async function createPieceBody(url, x, y) {
     const img = new Image();
     img.src = url;
@@ -158,10 +158,9 @@
     const imageData = tCtx.getImageData(0, 0, img.width, img.height);
     
     const points = [];
-    const step = 4; // ポイント抽出の密度（4ピクセルおき）
+    const step = 4; 
     for (let row = 0; row < img.height; row += step) {
       for (let col = 0; col < img.width; col += step) {
-        // 透明度が一定以上のピクセルのみを抽出
         if (imageData.data[(row * img.width + col) * 4 + 3] > 20) {
           points.push({ x: col, y: row });
         }
@@ -180,14 +179,13 @@
       render: { visible: false }
     }, true);
 
-    // 万が一解析に失敗した場合の安全策
     if (!body) return Bodies.rectangle(x, y, img.width*s, img.height*s, { isStatic:true });
 
     state.spriteMap.set(body.id, { img, s });
     return body;
   }
 
-  // 台座：幅を160に小さく変更
+  // 反映済み：台座を小さくスリム化（幅160）
   const baseW = 160, baseH = 20, baseY = cfg.h * cfg.baseYRatio;
   const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {
     isStatic: true, render: { fillStyle: '#8B7355' }, friction: 1, label: 'base'
@@ -291,7 +289,6 @@
     else { state.phase = 'AIM'; spawnPiece(); }
   };
 
-  // スマホ連打・長押し対応の簡易調整
   $('#left').onclick = () => move(-25);
   $('#right').onclick = () => move(25);
   $('#rot').onclick = () => rotate();
