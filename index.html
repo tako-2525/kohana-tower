@@ -3,418 +3,280 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>こはなタワー</title>
+<title>こはなタワー - 聖なる卒業式ver</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none}
-  html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
-  body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
-  .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08))}
-  .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
-  .c1{width:120px;height:44px;top:14%;animation:flow 22s linear infinite}
-  .c1::before{width:60px;height:60px;left:14px;top:-26px}
-  .c2{width:92px;height:38px;top:36%;animation:flow 27s linear infinite .6s}
-  .c2::before{width:68px;height:42px;right:18px;top:-20px}
-  @keyframes flow{0%{left:-140px}100%{left:110%}}
-
+  html,body{width:100%;height:100%;overflow:hidden;font-family:"Sawarabi Mincho",serif;background:#fdfbf7}
+  body{background:linear-gradient(to bottom,#e0f4ff 0%,#fdfbf7 100%)}
+  
   #game{position:fixed;inset:0;display:block;width:100%;height:100%}
 
   #status{position:fixed;top:10px;left:50%;transform:translateX(-50%);
-    background:rgba(255,255,255,.95);border-radius:22px;padding:8px 14px;display:flex;gap:14px;align-items:center;z-index:10}
-  .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333}
-  .si .v{font-size:18px;color:#FF6B6B}
+    background:rgba(255,255,255,.9);border:1px solid #d4af37;border-radius:22px;padding:8px 14px;display:flex;gap:14px;z-index:10}
+  .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#4a4238}
+  .si .v{font-size:18px;color:#d4af37}
 
   #ctrl{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:14px;z-index:10}
-  .btn{width:62px;height:62px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
-    display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(0,0,0,.12);cursor:pointer;touch-action:manipulation}
-  .btn:disabled{opacity:.4;cursor:not-allowed}
-  .btn:active{transform:scale(.96)}
-  .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:14px}
+  .btn{width:62px;height:62px;border-radius:50%;border:2px solid #d4af37;background:#fff;font-weight:700;font-size:24px;color:#4a4238;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(0,0,0,0.1);cursor:pointer}
+  .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#d4af37,#aa891d);color:#fff;font-size:14px;border:none}
+  .btn:disabled{opacity:.3}
 
-  .ov{position:fixed;inset:0;background:rgba(0,0,0,.66);display:none;align-items:center;justify-content:center;z-index:20}
+  .ov{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(4px)}
   .ov.show{display:flex}
-  .card{background:#fff;border-radius:28px;padding:32px 24px;max-width:min(480px,90%);text-align:center;box-shadow:0 18px 36px rgba(0,0,0,.28)}
-  .card h1{font-size:34px;margin-bottom:8px;color:#4E7FFF}
-  .card p{font-size:15px;color:#666;margin-bottom:20px}
-  .big{padding:14px 32px;border-radius:22px;border:none;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);color:#fff;font-weight:800;font-size:18px;cursor:pointer}
-  .card.win h1{color:#4ECDC4}
-  .card.lose h1{color:#95A5A6}
+  .card{background:#fff;border:2px solid #d4af37;border-radius:28px;padding:30px;max-width:90%;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.3)}
+  .card h1{font-size:28px;margin-bottom:10px;color:#aa891d}
+  .card p{font-size:14px;margin-bottom:20px;color:#666}
+  .big{padding:12px 30px;border-radius:20px;border:none;background:#d4af37;color:#fff;font-weight:bold;cursor:pointer}
+  
+  /* クリア報酬画像用 */
+  #rewardImg { max-width: 100%; max-height: 250px; display: none; margin: 15px 0; border: 3px double #d4af37; border-radius: 10px; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
-<script>
-  // fromVertices で decomp を使えるよう指定
-  window.decomp = decomp;
-  if (Matter && Matter.Common && Matter.Common.setDecomp) {
-    Matter.Common.setDecomp(decomp);
-  }
-</script>
 </head>
 <body>
-  <div class="cloud c1"></div><div class="cloud c2"></div>
+  <canvas id="game"></canvas>
 
   <div id="status">
-    <div class="si"><span>スコア</span><span id="score" class="v">0</span></div>
-    <div class="si"><span>ハイスコア</span><span id="hiscore" class="v">0</span></div>
-    <div class="si"><span>画像</span><span id="imgcnt" class="v">0</span></div>
+    <div class="si"><span>積んだ数</span><span id="score" class="v">0</span>/20</div>
+    <div class="si"><span>最高</span><span id="hiscore" class="v">0</span></div>
   </div>
 
   <div id="ctrl">
-    <button id="left"  class="btn" disabled>◀</button>
-    <button id="rot"   class="btn" disabled>↻</button>
-    <button id="drop"  class="btn drop" disabled>DROP</button>
-    <button id="right" class="btn" disabled>▶</button>
+    <button id="left"  class="btn">◀</button>
+    <button id="rot"   class="btn">↻</button>
+    <button id="drop"  class="btn drop">DROP</button>
+    <button id="right" class="btn">▶</button>
   </div>
 
-  <canvas id="game"></canvas>
-
   <div id="ov" class="ov show">
-    <div class="card" id="ovCard">
+    <div class="card">
       <h1 id="ovTitle">こはなタワー</h1>
-      <p id="ovMsg">土台に15個積めたらクリア！場外でゲームオーバー。</p>
+      <p id="ovMsg">20個積み上げたらクリア！<br>聖なる報酬が待っています。</p>
+      <img id="rewardImg" src="" alt="報酬画像">
       <button id="ovBtn" class="big">スタート</button>
     </div>
   </div>
 
 <script>
-(()=>{
-  const {Engine,Render,Runner,World,Bodies,Body,Composite,Events} = Matter;
+(() => {
+  const {Engine, Render, Runner, World, Bodies, Body, Composite, Events, Vertices} = Matter;
+  window.decomp = decomp;
 
-  /* ===== 基本設定 ===== */
   const cfg = {
     w: innerWidth, h: innerHeight,
-    gravity: 1.0,
-    maxPieces: 15,
-    targetEdge: 120,
-    baseYRatio: 0.75,
-    fallKillMargin: 80
+    maxPieces: 20, // 20個クリアに変更
+    baseYRatio: 0.8,
+    targetEdge: 100,
+    rewardImage: 'images/clear_reward.png' // ★ここにクリア後の画像パスを入れる
   };
 
-  /* ===== フェーズ ===== */
-  const PHASE = { READY:'READY', AIM:'AIM', DROP:'DROP', SETTLE:'SETTLE', OVER:'OVER' };
   const state = {
-    phase: PHASE.READY,
+    phase: 'READY',
     score: 0,
     hiscore: Number(localStorage.getItem('kohana.hiscore')||0),
     current: null,
     pieces: [],
-    images: [],
+    imagePool: [], // 偏り防止用のプール
     imagesReady: false,
-    stableFrames: 0,
-    spawnBusy: false
+    spriteMap: new Map()
   };
 
-  /* ===== UI ===== */
-  const $ = s=>document.querySelector(s);
-  const scoreEl=$('#score'), hisEl=$('#hiscore'), imgCntEl=$('#imgcnt');
-  const btnLeft=$('#left'), btnRight=$('#right'), btnRot=$('#rot'), btnDrop=$('#drop');
-  const ov=$('#ov'), ovCard=$('#ovCard'), ovTitle=$('#ovTitle'), ovMsg=$('#ovMsg'), ovBtn=$('#ovBtn');
-  hisEl.textContent = state.hiscore;
-  const setButtonsEnabled = en => [btnLeft,btnRight,btnRot,btnDrop].forEach(b=>{ b.disabled=!en; b.style.opacity=en?1:0.4; });
-  const updateScore = ()=>{
-    scoreEl.textContent = state.score;
-    if(state.score>state.hiscore){ state.hiscore=state.score; localStorage.setItem('kohana.hiscore', String(state.hiscore)); hisEl.textContent=state.hiscore; }
-  };
-
-  /* ===== 画像検出（名前ゆれ対応） ===== */
-  function candidatesFor(i){
-    const nn = String(i).padStart(2,'0');
-    const bases = [
-      `piece${nn}.png`,`piece_${nn}.png`,`peice${nn}.png`,`piece${i}.png`
-    ];
-    const exts=['png','PNG'];
-    const doubles = bases.flatMap(n=>[`${n}.png`,`${n}.PNG`]);
-    const all = [
-      ...bases.flatMap(n=>exts.map(e=>`${n.replace(/\.png$/,'')}.${e}`)),
-      ...doubles
-    ];
-    return all.map(n=>`images/${n}`);
-  }
-  const testImage = url => new Promise(res=>{ const img=new Image(); img.onload=()=>res(url); img.onerror=()=>res(null); img.src=url; });
-  async function findAllImages(){
-    const found=[];
-    for(let i=1;i<=cfg.maxPieces;i++){
-      let ok=null; for(const u of candidatesFor(i)){ ok = await testImage(u); if(ok) break; }
-      if(ok) found.push(ok);
-    }
-    state.images = found; state.imagesReady = true;
-    imgCntEl.textContent = `${found.length}/${cfg.maxPieces}`;
-  }
-  const rand = arr => arr[Math.floor(Math.random()*arr.length)];
-
-  /* ===== Matter.js 初期化 ===== */
   const canvas = document.getElementById('game');
-  const engine = Engine.create(); engine.world.gravity.y = cfg.gravity;
+  const engine = Engine.create();
+  // 物理のガタつきを抑えるための微調整
+  engine.velocityIterations = 8;
+  engine.positionIterations = 10;
+
   const render = Render.create({
     canvas, engine,
-    options:{ width:cfg.w, height:cfg.h, background:'transparent', wireframes:false,
-      pixelRatio: Math.min(devicePixelRatio||1, 2) }
+    options: { width: cfg.w, height: cfg.h, background: 'transparent', wireframes: false }
   });
-  Render.run(render); Runner.run(Runner.create(), engine);
 
-  // 土台＋壁
-  const baseW = Math.round(cfg.w*0.66), baseH=22, baseY = Math.round(cfg.h*cfg.baseYRatio);
-  const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {isStatic:true, render:{fillStyle:'#8B7355'}, label:'base'});
-  const wallL = Bodies.rectangle(-40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
-  const wallR = Bodies.rectangle(cfg.w+40, cfg.h/2, 80, cfg.h*2, {isStatic:true, render:{visible:false}, label:'wall'});
-  World.add(engine.world,[base,wallL,wallR]);
+  /* UI制御 */
+  const $ = s => document.querySelector(s);
+  const scoreEl=$('#score'), hisEl=$('#hiscore'), ov=$('#ov'), ovTitle=$('#ovTitle'), ovMsg=$('#ovMsg'), ovBtn=$('#ovBtn'), rewardImg=$('#rewardImg');
 
-  /* ===== 画像→輪郭→凸分解 ===== */
-  function getImageData(img){
-    const c=document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight;
-    const x=c.getContext('2d'); x.drawImage(img,0,0); return x.getImageData(0,0,c.width,c.height);
-  }
-  function traceContour(bin,w,h){
-    const idx=(x,y)=>y*w+x, inB=(x,y)=>x>=0&&y>=0&&x<w&&y<h;
-    let sx=-1, sy=-1;
-    outer: for(let y=0;y<h;y++){ for(let x=0;x<w;x++){
-      if(bin[idx(x,y)] && (!inB(x-1,y)||!bin[idx(x-1,y)] || !inB(x+1,y)||!bin[idx(x+1,y)] || !inB(x,y-1)||!bin[idx(x,y-1)] || !inB(x,y+1)||!bin[idx(x,y+1)])){ sx=x; sy=y; break outer; }
-    }}
-    if(sx<0) return [];
-    const dirs=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
-    let x=sx,y=sy, di=0, loop=0; const path=[];
-    do{
-      path.push([x,y]); let found=false;
-      for(let k=0;k<8;k++){ const ni=(di+k+7)%8; const nx=x+dirs[ni][0], ny=y+dirs[ni][1];
-        if(inB(nx,ny) && bin[idx(nx,ny)]){ x=nx; y=ny; di=ni; found=true; break; }}
-      if(!found) break; loop++; if(loop>w*h*4) break;
-    }while(!(x===sx && y===sy && path.length>1));
-    return path;
-  }
-  function simplifyRDP(pts, eps){
-    if(pts.length<3) return pts;
-    const [sx,sy]=pts[0], [ex,ey]=pts.at(-1); const A=ey-sy,B=sx-ex,C=ex*sy-ey*sx;
-    let dmax=0, idx=-1;
-    for(let i=1;i<pts.length-1;i++){ const [x,y]=pts[i]; const d=Math.abs(A*x+B*y+C)/Math.hypot(A,B); if(d>dmax){dmax=d; idx=i;} }
-    if(dmax<=eps) return [pts[0], pts.at(-1)];
-    const L=simplifyRDP(pts.slice(0,idx+1),eps), R=simplifyRDP(pts.slice(idx),eps);
-    return L.slice(0,-1).concat(R);
-  }
-  function ccwAndDedup(pts){
-    const p2=[]; for(const [x,y] of pts){ const last=p2[p2.length-1]; if(!last || last[0]!==x || last[1]!==y) p2.push([x,y]); }
-    if(p2.length<3) return p2;
-    let area=0; for(let i=0;i<p2.length;i++){ const [x1,y1]=p2[i], [x2,y2]=p2[(i+1)%p2.length]; area += (x1*y2 - x2*y1); }
-    if(area<0) p2.reverse(); return p2;
-  }
-
-  // 画像描画情報（自前レンダリング用）
-  const spriteMap = new Map(); // body.id -> {img, s}
-
-  async function bodyFromImageURL(url, x, y){
-    const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
-    const id = getImageData(img); const w=id.width, h=id.height, data=id.data;
-
-    const step = Math.max(2, Math.floor(Math.min(w,h)/64));
-    const bin = new Uint8Array(w*h); const thr=16;
-    for(let yy=0; yy<h; yy+=step){ for(let xx=0; xx<w; xx+=step){
-      const a = data[(yy*w+xx)*4+3];
-      if(a>thr){ for(let dy=0;dy<step && yy+dy<h;dy++){ for(let dx=0;dx<step && xx+dx<w;dx++){ bin[(yy+dy)*w+(xx+dx)]=1; } } }
-    }}
-    let contour = traceContour(bin,w,h);
-    const mat = { friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece' };
-
-    if(contour.length<8){
-      const s = cfg.targetEdge / Math.max(w,h);
-      const body = Bodies.rectangle(x,y, w*s, h*s, { render:{visible:false}, ...mat });
-      spriteMap.set(body.id, {img, s});
-      return body;
+  const updateScore = () => {
+    scoreEl.textContent = state.score;
+    if(state.score > state.hiscore) {
+      state.hiscore = state.score;
+      localStorage.setItem('kohana.hiscore', state.hiscore);
+      hisEl.textContent = state.hiscore;
     }
-    contour = ccwAndDedup(simplifyRDP(contour, Math.max(2, Math.min(w,h)/80)));
+  };
 
-    const minx=Math.min(...contour.map(p=>p[0])), maxx=Math.max(...contour.map(p=>p[0]));
-    const miny=Math.min(...contour.map(p=>p[1])), maxy=Math.max(...contour.map(p=>p[1]));
-    const s = cfg.targetEdge / Math.max(maxx-minx, maxy-miny || 1);
-    const cx=(minx+maxx)/2, cy=(miny+maxy)/2;
-    const verts = contour.map(([px,py])=>({x: x + (px-cx)*s, y: y + (py-cy)*s}));
-
-    // 物理の当たりだけ作って、描画は自前でやる（すべて非表示）
-    const body = Bodies.fromVertices(x, y, [verts], { render:{visible:false}, ...mat }, true) || 
-                 Bodies.rectangle(x,y,(maxx-minx)*s,(maxy-miny)*s,{ render:{visible:false}, ...mat });
-    spriteMap.set(body.id, {img, s});
-    return body;
+  /* 画像読み込み & 偏り防止のシャッフル */
+  async function prepareImages() {
+    const found = [];
+    for(let i=1; i<=15; i++){
+      const url = `images/piece${String(i).padStart(2,'0')}.png`;
+      const ok = await new Promise(res => {
+        const img = new Image();
+        img.onload = () => res(url);
+        img.onerror = () => res(null);
+        img.src = url;
+      });
+      if(ok) found.push(ok);
+    }
+    state.allImages = found;
+    fillImagePool();
+    state.imagesReady = true;
   }
 
-  /* ===== スポーン（AIM中のみ・1個厳守） ===== */
-  async function spawnPiece(){
-    if(state.phase!==PHASE.AIM) return;
-    if(state.current || state.spawnBusy) return;
-    state.spawnBusy = true;
+  function fillImagePool() {
+    // 15種類の画像をシャッフルしてプールに入れる（偏り防止）
+    state.imagePool = [...state.allImages].sort(() => Math.random() - 0.5);
+  }
 
-    const topY = state.pieces.length ? Math.min(...state.pieces.map(b => b.position.y)) : base.position.y;
-    const y = Math.min(120, topY - 200);
-    const x = cfg.w/2;
+  function getNextImage() {
+    if(state.imagePool.length === 0) fillImagePool();
+    return state.imagePool.pop();
+  }
 
-    let body=null;
-    try{
-      const url = state.images.length ? rand(state.images) : null;
-      if(url) body = await bodyFromImageURL(url, x, y);
-    }catch(e){ body=null; }
-    if(!body){
-      const size = cfg.targetEdge;
-      body = Bodies.polygon(x,y,(3+Math.floor(Math.random()*3)), size, { render:{visible:false}, friction:.5, frictionStatic:.8, restitution:.02, density:.0025, label:'piece' });
-    }
-    Body.setStatic(body, true);
-    body.label = 'currentPiece';
-    World.add(engine.world, body);
+  /* 土台作成 */
+  const baseW = 200, baseH = 20;
+  const base = Bodies.rectangle(cfg.w/2, cfg.h * cfg.baseYRatio, baseW, baseH, {
+    isStatic: true, render: { fillStyle: '#8B7355' }, friction: 1
+  });
+  World.add(engine.world, base);
+
+  /* ピース生成 */
+  async function spawnPiece() {
+    if(state.phase !== 'AIM' || state.current) return;
+    
+    const url = getNextImage();
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+
+    const s = cfg.targetEdge / Math.max(img.width, img.height);
+    const x = cfg.w/2, y = 100;
+
+    // 物理ボディ作成（簡易化してガタつき防止）
+    const body = Bodies.rectangle(x, y, img.width*s, img.height*s, {
+      friction: 0.8,
+      frictionStatic: 1.5,
+      restitution: 0.1,
+      density: 0.01,
+      isStatic: true,
+      label: 'piece',
+      render: { visible: false } // 自前描画するのでMatterの描画はオフ
+    });
+
+    state.spriteMap.set(body.id, { img, s });
     state.current = body;
-    state.spawnBusy = false;
+    World.add(engine.world, body);
   }
 
-  /* ===== 操作 ===== */
-  const movePiece = dx=>{
-    if(state.phase!==PHASE.AIM || !state.current) return;
-    const nx = Math.max(30, Math.min(cfg.w-30, state.current.position.x + dx));
-    Body.setPosition(state.current, {x:nx, y:state.current.position.y});
+  /* 操作関数 */
+  const move = dx => {
+    if(!state.current) return;
+    const nx = Math.max(50, Math.min(cfg.w - 50, state.current.position.x + dx));
+    Body.setPosition(state.current, { x: nx, y: state.current.position.y });
   };
-  const rotatePiece = ()=>{
-    if(state.phase!==PHASE.AIM || !state.current) return;
-    Body.rotate(state.current, Math.PI/3);
+  const rotate = () => {
+    if(!state.current) return;
+    Body.rotate(state.current, Math.PI/4);
   };
-  const dropPiece = ()=>{
-    if(state.phase!==PHASE.AIM || !state.current) return;
+  const drop = () => {
+    if(!state.current) return;
     Body.setStatic(state.current, false);
-    state.current.label='piece';
     state.pieces.push(state.current);
     state.current = null;
-    state.phase = PHASE.DROP;
-    state.stableFrames = 0;
-    setButtonsEnabled(false);
+    state.phase = 'DROP';
   };
 
-  /* ===== 物理：落下/安定 & 余分掃除 ===== */
-  const STABLE_NEED = 55, VEL_THR = 0.15, ANG_THR = 0.02;
-  function cleanupExtraCurrents(){
-    if(state.phase!==PHASE.AIM) return;
-    const currents = Composite.allBodies(engine.world).filter(b=>b.label==='currentPiece');
-    if(currents.length>1){ for(let i=1;i<currents.length;i++){ World.remove(engine.world, currents[i]); spriteMap.delete(currents[i].id); } }
-    if(!state.current || state.current.label!=='currentPiece'){ state.current = currents[0] || null; }
-  }
+  /* 更新ループ */
+  Events.on(engine, 'afterUpdate', () => {
+    if(state.phase === 'OVER') return;
 
-  Events.on(engine,'afterUpdate', ()=>{
-    if(state.phase===PHASE.OVER) return;
-    cleanupExtraCurrents();
-
-    // 場外/土台外チェック
-    const thresholdY = cfg.h + cfg.fallKillMargin;
-    const left = base.position.x - baseW/2, right= base.position.x + baseW/2;
-    for(const b of state.pieces){
-      if(b.position.y > thresholdY){ return lose(`${state.score}個で落下…`); }
-      if(b.position.y > base.position.y + 28 && (b.position.x<left || b.position.x>right)){
-        return lose(`${state.score}個で土台から落下…`);
+    // 落下判定
+    for(let b of state.pieces) {
+      if(b.position.y > cfg.h + 100) {
+        gameOver(`${state.score}個で落っこちてしまいました…`);
+        return;
       }
     }
 
-    // 安定判定（完全に落ち着くまで次を出さない）
-    if(state.phase===PHASE.DROP || state.phase===PHASE.SETTLE){
-      let allSlow=true;
-      for(const b of state.pieces){
-        if(b.isStatic) continue;
-        if(b.speed>VEL_THR || Math.abs(b.angularVelocity)>ANG_THR){ allSlow=false; break; }
-      }
-      state.stableFrames = allSlow ? state.stableFrames+1 : 0;
-      state.phase = allSlow ? PHASE.SETTLE : PHASE.DROP;
-
-      if(state.stableFrames>=STABLE_NEED){
-        state.score++; updateScore();
-        if(state.score >= cfg.maxPieces){ return win(); }
-        state.phase=PHASE.AIM; setButtonsEnabled(true); spawnPiece();
+    // 静止判定
+    if(state.phase === 'DROP') {
+      const isStable = state.pieces.every(b => b.speed < 0.2 && b.angularSpeed < 0.02);
+      if(isStable) {
+        state.score++;
+        updateScore();
+        if(state.score >= cfg.maxPieces) {
+          gameClear();
+        } else {
+          state.phase = 'AIM';
+          spawnPiece();
+        }
       }
     }
   });
 
-  /* ===== 自前スプライト描画（ここがキモ！各ボディ1枚だけ描く） ===== */
-  Events.on(render, 'afterRender', ()=>{
+  /* 自前描画（ Matter.js の標準Renderの上に乗せる ） */
+  Events.on(render, 'afterRender', () => {
     const ctx = render.context;
-    // 現在ピース＋積み上げたピース、すべて1枚ずつ描画
-    const drawOne = (b)=>{
-      const info = spriteMap.get(b.id);
-      if(!info) return;
-      const img = info.img, s = info.s;
-      const w = img.naturalWidth * s, h = img.naturalHeight * s;
+    [...state.pieces, state.current].forEach(b => {
+      if(!b) return;
+      const sprite = state.spriteMap.get(b.id);
+      if(!sprite) return;
       ctx.save();
       ctx.translate(b.position.x, b.position.y);
       ctx.rotate(b.angle);
-      ctx.drawImage(img, -w/2, -h/2, w, h);
+      ctx.drawImage(sprite.img, -sprite.img.width*sprite.s/2, -sprite.img.height*sprite.s/2, sprite.img.width*sprite.s, sprite.img.height*sprite.s);
       ctx.restore();
-    };
-    if(state.current) drawOne(state.current);
-    for(const b of state.pieces) drawOne(b);
+    });
   });
 
-  /* ===== カメラ ===== */
-  ;(function cam(){
-    let minY = base.position.y;
-    for(const b of state.pieces){ if(b.position.y < minY) minY = b.position.y; }
-    const marginTop = 100, desiredMinY = Math.min(0, minY - marginTop);
-    const curMinY = render.bounds.min.y, dy = (desiredMinY - curMinY)*0.1;
-    if(Math.abs(dy)>0.5){
-      const min={x:0,y:curMinY+dy}, max={x:cfg.w, y:min.y+cfg.h};
-      render.bounds.min=min; render.bounds.max=max;
-      const ctx = render.context, sx = canvas.width/cfg.w, sy=canvas.height/cfg.h;
-      ctx.setTransform(sx,0,0,sy,0,0);
-    }
-    requestAnimationFrame(cam);
-  })();
-
-  /* ===== 勝敗・リセット ===== */
-  function win(){
-    state.phase=PHASE.OVER; ov.classList.add('show'); ovCard.classList.add('win');
-    ovTitle.textContent='クリア！'; ovMsg.textContent=`見事 ${cfg.maxPieces} 個積み上げました！`; ovBtn.textContent='もう一度';
-  }
-  function lose(msg){
-    state.phase=PHASE.OVER; ov.classList.add('show'); ovCard.classList.add('lose');
-    ovTitle.textContent='ゲームオーバー'; ovMsg.textContent=msg||`${state.score}個で崩れてしまいました`; ovBtn.textContent='リトライ';
-  }
-  function reset(){
-    World.clear(engine.world, false); Engine.clear(engine);
-    engine.world.gravity.y = cfg.gravity; World.add(engine.world,[base,wallL,wallR]);
-    state.score=0; state.pieces.length=0; state.current=null; state.stableFrames=0; state.spawnBusy=false;
-    spriteMap.clear();
-    state.phase=PHASE.AIM; setButtonsEnabled(true);
-    render.bounds.min={x:0,y:0}; render.bounds.max={x:cfg.w,y:cfg.h};
-    updateScore(); spawnPiece();
+  function gameClear() {
+    state.phase = 'OVER';
+    ov.classList.add('show');
+    ovTitle.textContent = "祝！タワークリア！";
+    ovMsg.textContent = "20個の魂を積み上げました。報酬を授けます。";
+    rewardImg.src = cfg.rewardImage;
+    rewardImg.style.display = "block";
+    ovBtn.textContent = "もう一度遊ぶ";
   }
 
-  /* ===== 入力 ===== */
-  const press=(el,down)=>{
-    let t=null;
-    const start=e=>{e.preventDefault(); if(t)clearInterval(t); down(); t=setInterval(down,50)};
-    const stop =()=>{if(t){clearInterval(t);t=null}};
-    el.addEventListener('mousedown',start); el.addEventListener('touchstart',start,{passive:false});
-    el.addEventListener('mouseup',stop); el.addEventListener('mouseleave',stop);
-    el.addEventListener('touchend',stop); el.addEventListener('touchcancel',stop);
-  };
-  press(btnLeft, ()=>movePiece(-6));
-  press(btnRight,()=>movePiece( 6));
-  btnRot.addEventListener('click', rotatePiece);
-  btnDrop.addEventListener('click', dropPiece);
+  function gameOver(msg) {
+    state.phase = 'OVER';
+    ov.classList.add('show');
+    ovTitle.textContent = "ゲームオーバー";
+    ovMsg.textContent = msg;
+    rewardImg.style.display = "none";
+    ovBtn.textContent = "リトライ";
+  }
 
-  document.addEventListener('keydown', e=>{
-    if(e.key==='ArrowLeft') movePiece(-6);
-    if(e.key==='ArrowRight') movePiece(6);
-    if(e.key===' '){ e.preventDefault(); dropPiece(); }
-    if(['q','Q','e','E'].includes(e.key)) rotatePiece();
-    if(e.key==='r'||e.key==='R'){ if(state.phase===PHASE.OVER) reset(); }
-  });
+  function reset() {
+    state.pieces.forEach(b => World.remove(engine.world, b));
+    state.pieces = [];
+    state.score = 0;
+    state.spriteMap.clear();
+    updateScore();
+    state.phase = 'AIM';
+    spawnPiece();
+  }
 
-  window.addEventListener('resize', ()=>{
-    render.canvas.width = (cfg.w=innerWidth);
-    render.canvas.height= (cfg.h=innerHeight);
-  });
-
-  /* ===== 起動 ===== */
-  ovBtn.addEventListener('click', async ()=>{
-    if(state.phase!==PHASE.READY && state.phase!==PHASE.OVER) return;
+  /* イベント登録 */
+  ovBtn.onclick = async () => {
     ov.classList.remove('show');
-    if(!state.imagesReady) await findAllImages();
-    if(state.phase===PHASE.OVER){ reset(); return; }
-    state.phase=PHASE.AIM; setButtonsEnabled(true); spawnPiece();
-  });
+    if(!state.imagesReady) await prepareImages();
+    if(state.phase === 'OVER') reset();
+    else { state.phase = 'AIM'; spawnPiece(); }
+  };
 
-  // 初期表示
-  scoreEl.textContent = state.score;
+  $('#left').onclick = () => move(-30);
+  $('#right').onclick = () => move(30);
+  $('#rot').onclick = () => rotate();
+  $('#drop').onclick = () => drop();
+
+  Render.run(render);
+  Runner.run(Runner.create(), engine);
   hisEl.textContent = state.hiscore;
 })();
 </script>
 </body>
 </html>
-
