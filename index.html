@@ -3,40 +3,49 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>こはなタワー - 聖なる卒業式ver</title>
+<title>こはなタワー - 卒業式ver</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none}
-  html,body{width:100%;height:100%;overflow:hidden;font-family:"Sawarabi Mincho",serif;background:#fdfbf7}
-  body{background:linear-gradient(to bottom,#e0f4ff 0%,#fdfbf7 100%)}
+  html,body{width:100%;height:100%;overflow:hidden;font-family:"Sawarabi Mincho",serif;background:#87CEEB}
   
-  #game{position:fixed;inset:0;display:block;width:100%;height:100%}
+  /* 復活：青空と雲の背景モーション */
+  body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 50%,#B0E0E6 100%)}
+  .cloud{position:fixed;background:#fff;border-radius:100px;opacity:.85;filter:drop-shadow(0 4px 10px rgba(0,0,0,.08));z-index:0}
+  .cloud::before{content:"";position:absolute;background:#fff;border-radius:100px}
+  .c1{width:120px;height:44px;top:14%;animation:flow 22s linear infinite}
+  .c1::before{width:60px;height:60px;left:14px;top:-26px}
+  .c2{width:92px;height:38px;top:36%;animation:flow 27s linear infinite .6s}
+  .c2::before{width:68px;height:42px;right:18px;top:-20px}
+  @keyframes flow{0%{left:-140px}100%{left:110%}}
+
+  #game{position:fixed;inset:0;display:block;width:100%;height:100%;z-index:1}
 
   #status{position:fixed;top:10px;left:50%;transform:translateX(-50%);
-    background:rgba(255,255,255,.9);border:1px solid #d4af37;border-radius:22px;padding:8px 14px;display:flex;gap:14px;z-index:10}
-  .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#4a4238}
+    background:rgba(255,255,255,.95);border:2px solid #d4af37;border-radius:22px;padding:8px 14px;display:flex;gap:14px;align-items:center;z-index:10}
+  .si{display:flex;gap:6px;align-items:center;font-weight:700;color:#333}
   .si .v{font-size:18px;color:#d4af37}
 
   #ctrl{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:14px;z-index:10}
-  .btn{width:62px;height:62px;border-radius:50%;border:2px solid #d4af37;background:#fff;font-weight:700;font-size:24px;color:#4a4238;
-    display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(0,0,0,0.1);cursor:pointer}
-  .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#d4af37,#aa891d);color:#fff;font-size:14px;border:none}
-  .btn:disabled{opacity:.3}
+  .btn{width:62px;height:62px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.92);font-weight:700;font-size:24px;color:#333;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(0,0,0,.12);cursor:pointer;touch-action:manipulation}
+  .btn:disabled{opacity:.4}
+  .btn:active{transform:scale(.96)}
+  .btn.drop{width:74px;height:74px;background:linear-gradient(135deg,#FFD93D 0%,#FFB84D 100%);border-color:#FFB84D;color:#fff;font-size:14px}
 
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(4px)}
   .ov.show{display:flex}
-  .card{background:#fff;border:2px solid #d4af37;border-radius:28px;padding:30px;max-width:90%;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.3)}
-  .card h1{font-size:28px;margin-bottom:10px;color:#aa891d}
-  .card p{font-size:14px;margin-bottom:20px;color:#666}
-  .big{padding:12px 30px;border-radius:20px;border:none;background:#d4af37;color:#fff;font-weight:bold;cursor:pointer}
+  .card{background:#fff;border:2px solid #d4af37;border-radius:28px;padding:32px 24px;max-width:min(480px,90%);text-align:center;box-shadow:0 18px 36px rgba(0,0,0,.28)}
+  .card h1{font-size:30px;margin-bottom:8px;color:#aa891d}
+  .card p{font-size:15px;color:#666;margin-bottom:20px}
+  .big{padding:14px 32px;border-radius:22px;border:none;background:linear-gradient(135deg,#d4af37,#aa891d);color:#fff;font-weight:800;font-size:18px;cursor:pointer}
   
-  /* クリア報酬画像用 */
-  #rewardImg { max-width: 100%; max-height: 250px; display: none; margin: 15px 0; border: 3px double #d4af37; border-radius: 10px; }
+  #rewardImg { max-width: 100%; max-height: 250px; display: none; margin: 15px auto; border: 3px double #d4af37; border-radius: 10px; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
 </head>
 <body>
-  <canvas id="game"></canvas>
+  <div class="cloud c1"></div><div class="cloud c2"></div>
 
   <div id="status">
     <div class="si"><span>積んだ数</span><span id="score" class="v">0</span>/20</div>
@@ -50,26 +59,28 @@
     <button id="right" class="btn">▶</button>
   </div>
 
+  <canvas id="game"></canvas>
+
   <div id="ov" class="ov show">
     <div class="card">
       <h1 id="ovTitle">こはなタワー</h1>
-      <p id="ovMsg">20個積み上げたらクリア！<br>限界に挑戦せよ！</p>
-      <img id="rewardImg" src="" alt="報酬画像">
+      <p id="ovMsg">土台に20個積めたらクリア！<br>場外に落ちたらゲームオーバー。</p>
+      <img id="rewardImg" src="" alt="聖なる報酬">
       <button id="ovBtn" class="big">スタート</button>
     </div>
   </div>
 
 <script>
 (() => {
-  const {Engine, Render, Runner, World, Bodies, Body, Composite, Events, Vertices} = Matter;
+  const {Engine, Render, Runner, World, Bodies, Body, Composite, Events, Svg, Vertices} = Matter;
   window.decomp = decomp;
 
   const cfg = {
     w: innerWidth, h: innerHeight,
-    maxPieces: 20, // 20個クリアに変更
-    baseYRatio: 0.8,
-    targetEdge: 100,
-    rewardImage: 'images/clear_reward.png' // ★ここにクリア後の画像パスを入れる
+    maxPieces: 20, 
+    baseYRatio: 0.75,
+    targetEdge: 130, // オブジェクトの大きさを少し大きく修正
+    rewardImage: 'images/clear_reward.png' 
   };
 
   const state = {
@@ -78,23 +89,21 @@
     hiscore: Number(localStorage.getItem('kohana.hiscore')||0),
     current: null,
     pieces: [],
-    imagePool: [], // 偏り防止用のプール
+    imagePool: [],
     imagesReady: false,
     spriteMap: new Map()
   };
 
   const canvas = document.getElementById('game');
   const engine = Engine.create();
-  // 物理のガタつきを抑えるための微調整
-  engine.velocityIterations = 8;
-  engine.positionIterations = 10;
+  engine.velocityIterations = 10; // 物理の精度を上げ、ガタつきを抑制
+  engine.positionIterations = 12;
 
   const render = Render.create({
     canvas, engine,
     options: { width: cfg.w, height: cfg.h, background: 'transparent', wireframes: false }
   });
 
-  /* UI制御 */
   const $ = s => document.querySelector(s);
   const scoreEl=$('#score'), hisEl=$('#hiscore'), ov=$('#ov'), ovTitle=$('#ovTitle'), ovMsg=$('#ovMsg'), ovBtn=$('#ovBtn'), rewardImg=$('#rewardImg');
 
@@ -107,7 +116,6 @@
     }
   };
 
-  /* 画像読み込み & 偏り防止のシャッフル */
   async function prepareImages() {
     const found = [];
     for(let i=1; i<=15; i++){
@@ -126,7 +134,6 @@
   }
 
   function fillImagePool() {
-    // 15種類の画像をシャッフルしてプールに入れる（偏り防止）
     state.imagePool = [...state.allImages].sort(() => Math.random() - 0.5);
   }
 
@@ -135,45 +142,69 @@
     return state.imagePool.pop();
   }
 
-  /* 土台作成 */
-  const baseW = 200, baseH = 20;
-  const base = Bodies.rectangle(cfg.w/2, cfg.h * cfg.baseYRatio, baseW, baseH, {
-    isStatic: true, render: { fillStyle: '#8B7355' }, friction: 1
-  });
-  World.add(engine.world, base);
-
-  /* ピース生成 */
-  async function spawnPiece() {
-    if(state.phase !== 'AIM' || state.current) return;
-    
-    const url = getNextImage();
+  // 精密な当たり判定（画像を解析して頂点データを作る）
+  async function createPieceBody(url, x, y) {
     const img = new Image();
     img.src = url;
     await img.decode();
 
-    const s = cfg.targetEdge / Math.max(img.width, img.height);
-    const x = cfg.w/2, y = 100;
+    const tempCanvas = document.createElement('canvas');
+    const tCtx = tempCanvas.getContext('2d');
+    tempCanvas.width = img.width;
+    tempCanvas.height = img.height;
+    tCtx.drawImage(img, 0, 0);
+    const imageData = tCtx.getImageData(0, 0, img.width, img.height);
+    
+    // 画像からアルファ値に基づいたポイントを抽出
+    const points = [];
+    const step = 2; // 精度
+    for (let row = 0; row < img.height; row += step) {
+      for (let col = 0; col < img.width; col += step) {
+        if (imageData.data[(row * img.width + col) * 4 + 3] > 10) {
+          points.push({ x: col, y: row });
+        }
+      }
+    }
 
-    // 物理ボディ作成（簡易化してガタつき防止）
-    const body = Bodies.rectangle(x, y, img.width*s, img.height*s, {
+    // 凸包（Hull）を生成して形をぴっちりさせる
+    const hull = Vertices.hull(points);
+    const s = cfg.targetEdge / Math.max(img.width, img.height);
+    const scaledHull = Vertices.scale(hull, s, s);
+
+    const body = Bodies.fromVertices(x, y, [scaledHull], {
       friction: 0.8,
-      frictionStatic: 1.5,
-      restitution: 0.1,
-      density: 0.01,
+      frictionStatic: 1.2,
+      restitution: 0.05,
+      density: 0.005,
       isStatic: true,
-      label: 'piece',
-      render: { visible: false } // 自前描画するのでMatterの描画はオフ
-    });
+      render: { visible: false }
+    }, true);
+
+    // 失敗時のフォールバック（四角）
+    if (!body) return Bodies.rectangle(x, y, img.width*s, img.height*s, { isStatic:true });
 
     state.spriteMap.set(body.id, { img, s });
+    return body;
+  }
+
+  const baseW = 240, baseH = 22, baseY = cfg.h * cfg.baseYRatio;
+  const base = Bodies.rectangle(cfg.w/2, baseY, baseW, baseH, {
+    isStatic: true, render: { fillStyle: '#8B7355' }, friction: 1, label: 'base'
+  });
+  World.add(engine.world, base);
+
+  async function spawnPiece() {
+    if(state.phase !== 'AIM' || state.current) return;
+    const url = getNextImage();
+    const x = cfg.w/2, y = 100;
+    const body = await createPieceBody(url, x, y);
     state.current = body;
     World.add(engine.world, body);
   }
 
-  /* 操作関数 */
   const move = dx => {
     if(!state.current) return;
-    const nx = Math.max(50, Math.min(cfg.w - 50, state.current.position.x + dx));
+    const nx = Math.max(40, Math.min(cfg.w - 40, state.current.position.x + dx));
     Body.setPosition(state.current, { x: nx, y: state.current.position.y });
   };
   const rotate = () => {
@@ -188,35 +219,27 @@
     state.phase = 'DROP';
   };
 
-  /* 更新ループ */
   Events.on(engine, 'afterUpdate', () => {
     if(state.phase === 'OVER') return;
 
-    // 落下判定
     for(let b of state.pieces) {
       if(b.position.y > cfg.h + 100) {
-        gameOver(`${state.score}個で落っこちてしまいました…`);
+        gameOver(`${state.score}個で落下しました…`);
         return;
       }
     }
 
-    // 静止判定
     if(state.phase === 'DROP') {
-      const isStable = state.pieces.every(b => b.speed < 0.2 && b.angularSpeed < 0.02);
+      const isStable = state.pieces.every(b => b.speed < 0.3 && b.angularSpeed < 0.03);
       if(isStable) {
         state.score++;
         updateScore();
-        if(state.score >= cfg.maxPieces) {
-          gameClear();
-        } else {
-          state.phase = 'AIM';
-          spawnPiece();
-        }
+        if(state.score >= cfg.maxPieces) gameClear();
+        else { state.phase = 'AIM'; spawnPiece(); }
       }
     }
   });
 
-  /* 自前描画（ Matter.js の標準Renderの上に乗せる ） */
   Events.on(render, 'afterRender', () => {
     const ctx = render.context;
     [...state.pieces, state.current].forEach(b => {
@@ -234,20 +257,20 @@
   function gameClear() {
     state.phase = 'OVER';
     ov.classList.add('show');
-    ovTitle.textContent = "祝！タワークリア！";
-    ovMsg.textContent = "20個の魂を積み上げました。報酬を授けます。";
+    ovTitle.textContent = "✧ 祝・タワークリア ✧";
+    ovMsg.textContent = "20個の神殿を見事に守り抜きました。";
     rewardImg.src = cfg.rewardImage;
     rewardImg.style.display = "block";
-    ovBtn.textContent = "もう一度遊ぶ";
+    ovBtn.textContent = "神殿へ戻る";
   }
 
   function gameOver(msg) {
     state.phase = 'OVER';
     ov.classList.add('show');
-    ovTitle.textContent = "ゲームオーバー";
+    ovTitle.textContent = "崩壊...";
     ovMsg.textContent = msg;
     rewardImg.style.display = "none";
-    ovBtn.textContent = "リトライ";
+    ovBtn.textContent = "再び挑む";
   }
 
   function reset() {
@@ -260,7 +283,6 @@
     spawnPiece();
   }
 
-  /* イベント登録 */
   ovBtn.onclick = async () => {
     ov.classList.remove('show');
     if(!state.imagesReady) await prepareImages();
@@ -275,7 +297,6 @@
 
   Render.run(render);
   Runner.run(Runner.create(), engine);
-  hisEl.textContent = state.hiscore;
 })();
 </script>
 </body>
